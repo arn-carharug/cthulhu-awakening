@@ -7,6 +7,13 @@ let cameraPosition = vec3.fromValues(0, 2, 8);
 let cameraFront = vec3.fromValues(0, 0, -1);
 let cameraUp = vec3.fromValues(0, 1, 0);
 const cameraSpeed = 0.3;
+let yaw = -90;        // horizontal rotation, -90 so we look down -Z
+let pitch = 0;        // vertical rotation
+let lastX = window.innerWidth / 2;
+let lastY = window.innerHeight / 2;
+let firstMouse = true;
+const sensitivity = 0.1;
+let canvas;
 
 
 // Cube Geometry
@@ -57,6 +64,31 @@ window.addEventListener("keydown", (e) => {
         }
     }
 });
+
+function toRadians(degrees) {
+    return degrees * (Math.PI / 180);
+}
+
+window.addEventListener("mousemove", (event) => {
+    if (document.pointerLockElement !== canvas) return;
+    let offsetX = event.movementX * sensitivity;
+    let offsetY = -event.movementY * sensitivity;
+
+    yaw += offsetX;
+    pitch += offsetY;
+
+    // Limit vertical angle
+    if (pitch > 89.0) pitch = 89.0;
+    if (pitch < -89.0) pitch = -89.0;
+
+    // Update cameraFront vector
+    const front = vec3.create();
+    front[0] = Math.cos(toRadians(yaw)) * Math.cos(toRadians(pitch));
+    front[1] = Math.sin(toRadians(pitch));
+    front[2] = Math.sin(toRadians(yaw)) * Math.cos(toRadians(pitch));
+    vec3.normalize(cameraFront, front);
+});
+
 
 
 // R’lyeh Pillar Geometry
@@ -117,10 +149,15 @@ mat4.translate(cthulhuHeadMatrix, cthulhuHeadMatrix, [0, 1.5, -6]);
 const cthulhuBodyMatrix = mat4.create();
 mat4.translate(cthulhuBodyMatrix, cthulhuBodyMatrix, [0, 0, -6]);
 
+document.addEventListener("pointerlockchange", () => {
+    if (document.pointerLockElement !== canvas) {
+        firstMouse = true;
+    }
+});
 
 // Main function
 async function main() {
-    const canvas = document.getElementById("glCanvas");
+    canvas = document.getElementById("glCanvas");
     const gl = canvas.getContext("webgl2");
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -160,6 +197,9 @@ async function main() {
     gl.vertexAttribPointer(aPositionLoc, 3, gl.FLOAT, false, 0, 0);
 
     requestAnimationFrame(() => drawScene(gl, program, uModelLoc));
+    canvas.addEventListener("click", () => {
+    canvas.requestPointerLock();
+});
 }
 
 function createAndDrawObject(gl, program, vertices, indices, modelMatrix, uModelLoc) {
