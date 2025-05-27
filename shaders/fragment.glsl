@@ -1,41 +1,55 @@
+#version 300 es
 precision mediump float;
 
 uniform vec3 uAmbientLight;
 uniform int uTorchLit;
 uniform int uIsTorch;
 uniform int uTorchHovered;
-
 uniform vec3 uTorchLightPos;
+uniform vec3 uTorchLightColor;
 uniform float uTorchLightIntensity;
+uniform vec3 uTorchDirection;
 
-varying vec3 vPosition;
+in vec3 vPosition;
+in vec3 vNormal;
+
+out vec4 outColor;
 
 void main() {
     vec3 baseColor = vec3(0.4, 0.8, 0.9);
 
     if (uIsTorch == 1) {
         if (uTorchLit == 1) {
-            baseColor = vec3(1.0, 0.6, 0.1); // Lit torch color
-            if (uTorchHovered == 1) {
-                baseColor = mix(baseColor, vec3(1.0, 0.85, 0.3), 0.5); // Lit + hovered: brighter yellowish
-            }
+            baseColor = vec3(1.0, 0.6, 0.1); // Meşale yanıyorsa
+        } else if (uTorchHovered == 1) {
+            baseColor = vec3(1.0, 0.8, 0.2); // Hover efekti
         } else {
-            baseColor = vec3(0.3, 0.3, 0.3); // Unlit torch color
-            if (uTorchHovered == 1) {
-                baseColor = vec3(1.0, 1.0, 0.7); // Only hovered: bright pale yellow
-            }
+            baseColor = vec3(0.3, 0.3, 0.3); // Sönük meşale
         }
     }
 
-    // Apply torchEffect only when torch is lit:
-    vec3 torchEffect = vec3(0.0);
-    if (uIsTorch == 1 && uTorchLit == 1) {
-        vec3 lightColor = vec3(1.0, 0.8, 0.4);
+    vec3 light = uAmbientLight * baseColor;
+
+    if (uTorchLit == 1 && uIsTorch == 0) {
         vec3 lightDir = normalize(uTorchLightPos - vPosition);
-        float diff = max(abs(dot(normalize(vec3(0.0, 1.0, 0.0)), lightDir)), 0.25); // minimum contribution
-        torchEffect = lightColor * diff * uTorchLightIntensity;
+        float diff = max(dot(normalize(vNormal), lightDir), 0.0);
+
+        float spotEffect = dot(-lightDir, normalize(uTorchDirection));
+        float spotCutoff = 0.85; // cos(30deg)
+        float spotOuterCutoff = 0.65; // cos(50deg)
+        float intensity = 0.0;
+
+        if (spotEffect > spotCutoff) {
+            intensity = 1.0;
+        } else if (spotEffect > spotOuterCutoff) {
+            float t = (spotEffect - spotOuterCutoff) / (spotCutoff - spotOuterCutoff);
+            intensity = t;
+        }
+        intensity = pow(intensity, 1.8); // Yumuşak düşüş
+
+        vec3 torchLight = uTorchLightColor * diff * intensity * uTorchLightIntensity;
+        light += torchLight * baseColor;
     }
 
-    vec3 finalColor = baseColor * uAmbientLight + torchEffect;
-    gl_FragColor = vec4(finalColor, 1.0);
+    outColor = vec4(light, 1.0);
 }

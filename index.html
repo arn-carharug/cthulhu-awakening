@@ -3,11 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <title>The Awakening of Cthulhu</title>
-    <link rel="stylesheet" href="css/style.css">
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #050912;
+        height: 100%;
+        width: 100%;
+      }
+      #glCanvas {
+        display: block;
+        position: absolute;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        outline: none;
+        background: #050912;
+        z-index: 1;
+      }
+      #torch-ui {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        color: #FFD700;
+        background: rgba(20,20,20,0.7);
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 16px;
+        z-index: 10;
+        pointer-events: none;
+      }
+    </style>
 </head>
 <body>
-    <canvas id="glCanvas"></canvas>
+    <canvas id="glCanvas" tabindex="1"></canvas>
+    <div id="torch-ui">
+      Torch Control: <span id="torch-mode">OFF</span><br>
+      Brightness: <span id="torch-brightness">1.0</span>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.3/gl-matrix-min.js"></script>
-     <script src="main.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>

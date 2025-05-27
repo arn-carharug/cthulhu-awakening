@@ -38,7 +38,16 @@ const STATE = {
     uTorchLightPosLoc: null,
     uTorchLightIntensityLoc: null,
     uTorchHoveredLoc: null,
-    program: null
+    program: null,
+    torchYaw: 0,
+    torchPitch: 0,
+    torchControlMode: false,
+    minAmbient: 0.01,
+    minTorch: 0.1,
+    maxTorch: 2.0,
+    // Ekler:
+    uTorchLightColorLoc: null,
+    uTorchDirectionLoc: null,
 };
 
 // Geometry Data
@@ -118,22 +127,58 @@ STATE.mat4.translate(cthulhuHeadMatrix, cthulhuHeadMatrix, [0, 1.5, -6]);
 const cthulhuBodyMatrix = STATE.mat4.create();
 STATE.mat4.translate(cthulhuBodyMatrix, cthulhuBodyMatrix, [0, 0, -6]);
 
-function getTorchPosition() {
-    // Torch position relative to ship
-    return STATE.vec3.fromValues(
-        STATE.shipPosition[0] + 0.6,
-        STATE.shipPosition[1] + 1.2,
-        STATE.shipPosition[2] - 1.8
-    );
-}
-
 function toRadians(degrees) {
     return degrees * (Math.PI / 180);
+}
+
+// FPS torch: kamera açısına göre sabit offsetli küçük torch
+function getTorchPosition() {
+    if (STATE.torchControlMode && STATE.torchLit) {
+        // FPS torch: kameranın sağ üstte sabit ofseti
+        const forwardDist = 0.7;   // İleriye uzaklık
+        const rightDist = 0.4;     // Sağa uzaklık (ekran sağ üstü için artır)
+        const upDist = 0.1;       // Hafif aşağı
+
+        const cameraPos = STATE.vec3.clone(STATE.shipPosition);
+        cameraPos[1] += 1.2;
+        cameraPos[2] += 1.5;
+
+        const front = STATE.vec3.clone(STATE.cameraFront);
+        STATE.vec3.normalize(front, front);
+
+        // FPS mantığı: up vektörü dünyadan alınmalı!
+        const worldUp = [0, 1, 0];
+        const right = STATE.vec3.create();
+        STATE.vec3.cross(right, front, worldUp);
+        STATE.vec3.normalize(right, right);
+
+        const up = STATE.vec3.create();
+        STATE.vec3.cross(up, right, front);
+        STATE.vec3.normalize(up, up);
+
+        let torchPos = STATE.vec3.clone(cameraPos);
+        STATE.vec3.scaleAndAdd(torchPos, torchPos, front, forwardDist);
+        STATE.vec3.scaleAndAdd(torchPos, torchPos, right, rightDist);
+        STATE.vec3.scaleAndAdd(torchPos, torchPos, up, upDist);
+
+        return torchPos;
+    } else {
+        // Sabit torch
+        if (!STATE.torchOffset) {
+            STATE.torchOffset = [0.6, 1.2, -1.8];
+        }
+        return [
+            STATE.shipPosition[0] + STATE.torchOffset[0],
+            STATE.shipPosition[1] + STATE.torchOffset[1],
+            STATE.shipPosition[2] + STATE.torchOffset[2]
+        ];
+    }
 }
 
 // Mouse/keyboard events: camera and torch hover
 window.addEventListener("mousemove", (event) => {
     if (document.pointerLockElement !== STATE.canvas) return;
+
     let offsetX = event.movementX * STATE.sensitivity;
     let offsetY = -event.movementY * STATE.sensitivity;
 
@@ -148,29 +193,51 @@ window.addEventListener("mousemove", (event) => {
     front[2] = Math.sin(toRadians(STATE.yaw)) * Math.cos(toRadians(STATE.pitch));
     STATE.vec3.normalize(STATE.cameraFront, front);
 
-    // Torch hover detection
-    const rect = STATE.canvas.getBoundingClientRect();
-    const mouseX = ((event.clientX - rect.left) / STATE.canvas.width) * 2 - 1;
-    const mouseY = -((event.clientY - rect.top) / STATE.canvas.height) * 2 + 1;
+    // Meşale hover logic (sadece torch yanmadan çalışır)
+    if (STATE.awakeningStarted && STATE.cthulhuRiseY >= STATE.maxRiseY && !STATE.torchLit) {
+        const rect = STATE.canvas.getBoundingClientRect();
+        const mouseX = ((event.clientX - rect.left) / STATE.canvas.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / STATE.canvas.height) * 2 + 1;
 
-    const viewMatrix = STATE.mat4.create();
-    const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
-    cameraPosition[1] += 1.2;
-    cameraPosition[2] += 1.5;
-    const target = STATE.vec3.create();
-    STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
-    STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
+        const viewMatrix = STATE.mat4.create();
+        const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
+        cameraPosition[1] += 1.2;
+        cameraPosition[2] += 1.5;
+        const target = STATE.vec3.create();
+        STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
+        STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
 
-    const projectionMatrix = STATE.mat4.create();
-    STATE.mat4.perspective(projectionMatrix, Math.PI / 4, STATE.canvas.width / STATE.canvas.height, 0.1, 100);
-    const ray = getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix);
+        const projectionMatrix = STATE.mat4.create();
+        STATE.mat4.perspective(projectionMatrix, Math.PI / 4, STATE.canvas.width / STATE.canvas.height, 0.1, 100);
 
-    const torchPos = getTorchPosition();
-    STATE.torchHovered = rayIntersectsSphere(ray.origin, ray.direction, torchPos, 0.5);
+        const ray = getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix);
+        const torchPos = getTorchPosition();
+
+        STATE.torchHovered = rayIntersectsSphere(ray.origin, ray.direction, torchPos, 0.5);
+    } else {
+        STATE.torchHovered = false;
+    }
+});
+
+// 4. MOUSE SCROLL: Torch parlaklığını ayarla
+window.addEventListener('wheel', (e) => {
+    if (STATE.torchLit && STATE.torchControlMode) {
+        STATE.torchLightIntensity += (e.deltaY < 0 ? 0.05 : -0.05);
+        STATE.torchLightIntensity = Math.max(STATE.minTorch, Math.min(STATE.maxTorch, STATE.torchLightIntensity));
+        document.getElementById("torch-brightness").textContent = STATE.torchLightIntensity.toFixed(2);
+    }
 });
 
 window.addEventListener("keydown", (e) => {
-    if (STATE.awakeningStarted) return;
+    // Sadece awakening başlamadan WASD çalışsın. Torch kontrol modunda da devre dışı.
+    if (STATE.awakeningStarted || STATE.torchControlMode) {
+        // Sadece 'M' tuşunu torchLit ise işleme al
+        if (e.key.toLowerCase() === "m" && STATE.torchLit) {
+            STATE.torchControlMode = !STATE.torchControlMode;
+            document.getElementById("torch-mode").textContent = STATE.torchControlMode ? "CONTROL" : "ON";
+        }
+        return;
+    }
     const direction = STATE.vec3.create();
     switch (e.key.toLowerCase()) {
         case "w":
@@ -233,6 +300,10 @@ async function main() {
     STATE.uTorchLightPosLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchLightPos");
     STATE.uTorchLightIntensityLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchLightIntensity");
     STATE.uTorchHoveredLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchHovered");
+
+    // **Spotlight için eklenen uniformlar**
+    STATE.uTorchLightColorLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchLightColor");
+    STATE.uTorchDirectionLoc  = STATE.gl.getUniformLocation(STATE.program, "uTorchDirection");
 
     // Setup projection and view
     const viewMatrix = STATE.mat4.create();
@@ -321,17 +392,17 @@ function createAndDrawObject(vertices, indices, modelMatrix) {
     gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
 }
 
+
 function drawScene() {
     const gl = STATE.gl;
-    // Ambient and torch intensity logic
+
+    // 1. Ambient ve torch intensity logic
     if (STATE.torchLit) {
-        // Gradually increase ambient light
         STATE.ambientLight[0] = Math.min(STATE.ambientLight[0] + 0.01, 0.8);
         STATE.ambientLight[1] = Math.min(STATE.ambientLight[1] + 0.008, 0.55);
         STATE.ambientLight[2] = Math.min(STATE.ambientLight[2] + 0.002, 0.25);
-        // Torch light intensity (slower in low ambient)
         if (STATE.torchLightIntensity < STATE.maxTorchLight) {
-            let inc = Math.max(0.003, 0.012 * (STATE.ambientLight[0])); 
+            let inc = Math.max(0.003, 0.012 * (STATE.ambientLight[0]));
             STATE.torchLightIntensity = Math.min(STATE.torchLightIntensity + inc, STATE.maxTorchLight);
         }
     } else if (STATE.awakeningStarted) {
@@ -340,34 +411,45 @@ function drawScene() {
         STATE.ambientLight[2] = Math.max(STATE.ambientLight[2] - 0.0015, 0.08);
     }
 
-    gl.uniform1i(STATE.uTorchLitLoc, STATE.torchLit ? 1 : 0);
-    gl.uniform3fv(STATE.uAmbientLightLoc, STATE.ambientLight);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    const torchPos = getTorchPosition();
-    gl.uniform3fv(STATE.uTorchLightPosLoc, torchPos);
-    gl.uniform1f(STATE.uTorchLightIntensityLoc, STATE.torchLightIntensity);
-
-    // Update camera view
-    const viewMatrix = STATE.mat4.create();
-    const target = STATE.vec3.create();
-    const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
+    // 2. View ve kamera ayarı (her zaman aynı)
+    let cameraPosition = STATE.vec3.clone(STATE.shipPosition);
     cameraPosition[1] += 1.2;
     cameraPosition[2] += 1.5;
+    let target = STATE.vec3.create();
     STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
+
+    const viewMatrix = STATE.mat4.create();
     STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
     gl.uniformMatrix4fv(STATE.uViewLoc, false, viewMatrix);
 
-    // Torch model matrix
+    // 3. Meşale pozisyonunu FPS'e göre hesapla
+    const torchPos = getTorchPosition();
+
+    // 4. Torch model matrix (FPS modunda scale uygula)
     STATE.mat4.identity(STATE.torchMatrix);
     STATE.mat4.translate(STATE.torchMatrix, STATE.torchMatrix, torchPos);
+    if (STATE.torchControlMode && STATE.torchLit) {
+        STATE.mat4.scale(STATE.torchMatrix, STATE.torchMatrix, [0.15, 0.15, 0.15]);
+    }
 
-    // Awakening logic: rising ruins and Cthulhu
+    // 5. Uniform'lar ve temizlik
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    gl.uniform1i(STATE.uTorchLitLoc, STATE.torchLit ? 1 : 0);
+    gl.uniform3fv(STATE.uAmbientLightLoc, STATE.ambientLight);
+    gl.uniform1i(STATE.uTorchHoveredLoc, STATE.torchHovered ? 1 : 0);
+    gl.uniform3fv(STATE.uTorchLightPosLoc, torchPos);
+    gl.uniform1f(STATE.uTorchLightIntensityLoc, STATE.torchLightIntensity);
+
+    // FPS torch spotlight: renk ve yön de gönderiliyor!
+    gl.uniform3fv(STATE.uTorchLightColorLoc, [1.0, 0.7, 0.2]);
+    gl.uniform3fv(STATE.uTorchDirectionLoc, STATE.cameraFront);
+
+    // 6. Awakening: pillar ve cthulhu hareketleri
     if (!STATE.awakeningStarted && STATE.vec3.distance(STATE.shipPosition, STATE.rlyehCenter) < 5.0) {
         STATE.awakeningStarted = true;
         console.log("The Awakening Begins!");
     }
-
     if (STATE.awakeningStarted && STATE.cthulhuRiseY < STATE.maxRiseY) {
         STATE.mat4.translate(pillar1Matrix, pillar1Matrix, [0, STATE.riseSpeed, 0]);
         STATE.mat4.translate(pillar2Matrix, pillar2Matrix, [0, STATE.riseSpeed, 0]);
@@ -376,7 +458,7 @@ function drawScene() {
         STATE.cthulhuRiseY += STATE.riseSpeed;
     }
 
-    // Draw ship
+    // 7. Ship çizimi
     gl.uniform1i(STATE.uIsTorchLoc, 0);
     gl.uniform1i(STATE.uTorchHoveredLoc, 0);
     gl.bindVertexArray(STATE.cubeVAO);
@@ -385,14 +467,14 @@ function drawScene() {
     gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
     gl.drawElements(gl.TRIANGLES, cubeIndices.length, gl.UNSIGNED_SHORT, 0);
 
-    // Draw torch
+    // 8. Torch çizimi
     gl.uniform1i(STATE.uIsTorchLoc, 1);
     gl.uniform1i(STATE.uTorchHoveredLoc, STATE.torchHovered ? 1 : 0);
     gl.bindVertexArray(STATE.torchVAO);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, STATE.torchMatrix);
     gl.drawElements(gl.TRIANGLES, torchIndices.length, gl.UNSIGNED_SHORT, 0);
 
-    // Draw pillars and Cthulhu
+    // 9. Pillar ve cthulhu
     gl.uniform1i(STATE.uIsTorchLoc, 0);
     gl.uniform1i(STATE.uTorchHoveredLoc, 0);
     createAndDrawObject(pillarVertices, pillarIndices, pillar1Matrix);
@@ -402,6 +484,7 @@ function drawScene() {
 
     requestAnimationFrame(drawScene);
 }
+
 
 // Helpers
 async function loadShaderSource(url) {
