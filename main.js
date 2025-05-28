@@ -1,12 +1,84 @@
-// Global State
+// =====================
+// OBJ + MTL Loader
+// =====================
+async function loadText(url) {
+    const res = await fetch(url);
+    return await res.text();
+}
+
+// Sadece Kd (diffuse renk) okuyan basit mtl parser
+function parseMTL(mtlText) {
+    const materials = {};
+    let curMat = null;
+    mtlText.split('\n').forEach(line => {
+        line = line.trim();
+        if (line.startsWith('newmtl ')) {
+            curMat = line.split(' ')[1];
+            materials[curMat] = { Kd: [0.8, 0.8, 0.8] };
+        } else if (line.startsWith('Kd ') && curMat) {
+            const [, r, g, b] = line.split(/\s+/);
+            materials[curMat].Kd = [parseFloat(r), parseFloat(g), parseFloat(b)];
+        }
+    });
+    return materials;
+}
+
+// OBJ loader: pozisyon, normal, materyal rengi
+async function loadOBJWithMTL(objUrl, mtlUrl) {
+    const objText = await loadText(objUrl);
+    const mtlText = await loadText(mtlUrl);
+    const materials = parseMTL(mtlText);
+
+    const positions = [], normals = [];
+    let curMaterial = null;
+    const uniqueVerts = {};
+    let vertices = [];
+    let finalIndices = [];
+
+    objText.split('\n').forEach(line => {
+        line = line.trim();
+        if (line.startsWith('v ')) {
+            const [, x, y, z] = line.split(/\s+/);
+            positions.push([parseFloat(x), parseFloat(y), parseFloat(z)]);
+        } else if (line.startsWith('vn ')) {
+            const [, x, y, z] = line.split(/\s+/);
+            normals.push([parseFloat(x), parseFloat(y), parseFloat(z)]);
+        } else if (line.startsWith('usemtl ')) {
+            curMaterial = line.split(' ')[1];
+        } else if (line.startsWith('f ')) {
+            const verts = line.substr(2).trim().split(/\s+/);
+            for (let i = 0; i < 3; ++i) {
+                const [vi, vti, vni] = verts[i].split('/').map(x => parseInt(x) || 1);
+                const key = `${vi}/${vni}/${curMaterial}`;
+                if (uniqueVerts[key] === undefined) {
+                    const pos = positions[vi - 1];
+                    const nor = normals[vni - 1];
+                    const col = (materials[curMaterial] || { Kd: [0.7, 0.7, 0.7] }).Kd;
+                    vertices.push(...pos, ...nor, ...col);
+                    uniqueVerts[key] = (vertices.length / 9) - 1;
+                }
+                finalIndices.push(uniqueVerts[key]);
+            }
+        }
+    });
+    return {
+        vertices: new Float32Array(vertices),
+        indices: new Uint16Array(finalIndices)
+    };
+}
+
+// ===============
+// GLMATRİX STATE (aynen korunuyor)
+// ===============
 const STATE = {
     gl: null,
     mat4: glMatrix.mat4,
     vec3: glMatrix.vec3,
     vec4: glMatrix.vec4,
     canvas: null,
-    shipPosition: glMatrix.vec3.fromValues(0, 0, 10),
-    cubeVAO: null,
+    shipPosition: glMatrix.vec3.fromValues(10, 0, 60),
+    shipVAO: null,
+    shipIndexCount: 0,
     cameraFront: glMatrix.vec3.fromValues(0, 0, -1),
     cameraUp: glMatrix.vec3.fromValues(0, 1, 0),
     cameraSpeed: 0.3,
@@ -23,7 +95,7 @@ const STATE = {
     torchClicked: false,
     torchHovered: false,
     torchLightIntensity: 0.0,
-    maxTorchLight: 1.0, // tweak for effect
+    maxTorchLight: 1.0,
     awakeningStarted: false,
     cthulhuRiseY: 0,
     maxRiseY: 3.0,
@@ -45,54 +117,23 @@ const STATE = {
     minAmbient: 0.01,
     minTorch: 0.1,
     maxTorch: 2.0,
-    // Ekler:
     uTorchLightColorLoc: null,
     uTorchDirectionLoc: null,
 };
+// STATE'in hemen altına ekle:
+let pillarsRiseY = 0;
+const pillarsMaxRiseY = 25.0; // Kaç birim yükselecek? (Ayarlayabilirsin)
+const pillarsRiseSpeed = 0.2; // Hız (frame başına artış)
 
-// Geometry Data
-const cubeVertices = new Float32Array([
-    -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1,
-    -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1,
-    -1, 1, 1, -1, 1, -1, -1, -1, -1, -1, -1, 1,
-    1, 1, 1, 1, 1, -1, 1, -1, -1, 1, -1, 1,
-    -1, 1, -1, 1, 1, -1, 1, 1, 1, -1, 1, 1,
-    -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1
-]);
-const cubeIndices = new Uint16Array([
-    0, 1, 2, 0, 2, 3,
-    4, 5, 6, 4, 6, 7,
-    8, 9, 10, 8, 10, 11,
-    12, 13, 14, 12, 14, 15,
-    16, 17, 18, 16, 18, 19,
-    20, 21, 22, 20, 22, 23
-]);
-const torchVertices = new Float32Array([
-    // bottom
-    -0.1, 0, -0.1, 0.1, 0, -0.1, 0.1, 0, 0.1, -0.1, 0, 0.1,
-    // top
-    -0.1, 0.4, -0.1, 0.1, 0.4, -0.1, 0.1, 0.4, 0.1, -0.1, 0.4, 0.1
-]);
-const torchIndices = new Uint16Array([
-    0, 1, 2, 0, 2, 3,
-    4, 5, 6, 4, 6, 7,
-    0, 1, 5, 0, 5, 4,
-    1, 2, 6, 1, 6, 5,
-    2, 3, 7, 2, 7, 6,
-    3, 0, 4, 3, 4, 7
-]);
-const pillarVertices = new Float32Array([
-    -0.5, 0, -0.5, 0.5, 0, -0.5, 0.5, 0, 0.5, -0.5, 0, 0.5,
-    -0.5, 2, -0.5, 0.5, 2, -0.5, 0.5, 2, 0.5, -0.5, 2, 0.5
-]);
-const pillarIndices = new Uint16Array([
-    0, 1, 2, 0, 2, 3,
-    4, 5, 6, 4, 6, 7,
-    0, 1, 5, 0, 5, 4,
-    1, 2, 6, 1, 6, 5,
-    2, 3, 7, 2, 7, 6,
-    3, 0, 4, 3, 4, 7
-]);
+// Paralel ve aralarından botun geçebileceği sütun pozisyonları
+const pillarPositions = [
+    [-50, 0, -30],
+    [0,   0, -30],
+    [50,  0, -30]
+    // (Aradaki mesafeyi ve sayıyı istediğin gibi ayarlayabilirsin)
+];
+
+
 const sphereVertices = new Float32Array([
     0.0, 1.0, 0.0, 0.7, 0.7, 0.0, 1.0, 0.0, 0.0, 0.7, -0.7, 0.0,
     0.0, -1.0, 0.0, -0.7, -0.7, 0.0, -1.0, 0.0, 0.0, -0.7, 0.7, 0.0
@@ -193,6 +234,18 @@ window.addEventListener("mousemove", (event) => {
     front[2] = Math.sin(toRadians(STATE.yaw)) * Math.cos(toRadians(STATE.pitch));
     STATE.vec3.normalize(STATE.cameraFront, front);
 
+    // FPS kamera için sağ ve yukarı vektörlerini de güncelle:
+    const right = STATE.vec3.create();
+    STATE.vec3.cross(right, STATE.cameraFront, [0, 1, 0]);
+    STATE.vec3.normalize(right, right);
+
+    const up = STATE.vec3.create();
+    STATE.vec3.cross(up, right, STATE.cameraFront);
+    STATE.vec3.normalize(up, up);
+    STATE.cameraUp = up;
+
+
+
     // Meşale hover logic (sadece torch yanmadan çalışır)
     if (STATE.awakeningStarted && STATE.cthulhuRiseY >= STATE.maxRiseY && !STATE.torchLit) {
         const rect = STATE.canvas.getBoundingClientRect();
@@ -229,9 +282,7 @@ window.addEventListener('wheel', (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
-    // Sadece awakening başlamadan WASD çalışsın. Torch kontrol modunda da devre dışı.
     if (STATE.awakeningStarted || STATE.torchControlMode) {
-        // Sadece 'M' tuşunu torchLit ise işleme al
         if (e.key.toLowerCase() === "m" && STATE.torchLit) {
             STATE.torchControlMode = !STATE.torchControlMode;
             document.getElementById("torch-mode").textContent = STATE.torchControlMode ? "CONTROL" : "ON";
@@ -240,17 +291,27 @@ window.addEventListener("keydown", (e) => {
     }
     const direction = STATE.vec3.create();
     switch (e.key.toLowerCase()) {
-        case "w":
-            STATE.vec3.scale(direction, STATE.cameraFront, STATE.cameraSpeed);
+        case "w": {
+            // cameraFront'ın Y'sini sıfırla, normalize et!
+            const forward = STATE.vec3.clone(STATE.cameraFront);
+            forward[1] = 0;
+            STATE.vec3.normalize(forward, forward);
+            STATE.vec3.scale(direction, forward, STATE.cameraSpeed);
             STATE.vec3.add(STATE.shipPosition, STATE.shipPosition, direction);
             break;
-        case "s":
-            STATE.vec3.scale(direction, STATE.cameraFront, STATE.cameraSpeed);
+        }
+        case "s": {
+            const forward = STATE.vec3.clone(STATE.cameraFront);
+            forward[1] = 0;
+            STATE.vec3.normalize(forward, forward);
+            STATE.vec3.scale(direction, forward, STATE.cameraSpeed);
             STATE.vec3.sub(STATE.shipPosition, STATE.shipPosition, direction);
             break;
+        }
         case "a": {
             const right = STATE.vec3.create();
-            STATE.vec3.cross(right, STATE.cameraFront, STATE.cameraUp);
+            // Yüzeydeki right vektörü için, up olarak [0,1,0] kullan!
+            STATE.vec3.cross(right, STATE.cameraFront, [0, 1, 0]);
             STATE.vec3.normalize(right, right);
             STATE.vec3.scale(right, right, STATE.cameraSpeed);
             STATE.vec3.sub(STATE.shipPosition, STATE.shipPosition, right);
@@ -258,20 +319,23 @@ window.addEventListener("keydown", (e) => {
         }
         case "d": {
             const right = STATE.vec3.create();
-            STATE.vec3.cross(right, STATE.cameraFront, STATE.cameraUp);
+            STATE.vec3.cross(right, STATE.cameraFront, [0, 1, 0]);
             STATE.vec3.normalize(right, right);
             STATE.vec3.scale(right, right, STATE.cameraSpeed);
             STATE.vec3.add(STATE.shipPosition, STATE.shipPosition, right);
             break;
         }
     }
+    console.log('Ship Position:', STATE.shipPosition);
 });
 
 document.addEventListener("pointerlockchange", () => {
     if (document.pointerLockElement !== STATE.canvas) STATE.firstMouse = true;
 });
 
-// Main
+// =====================
+// MAIN
+// =====================
 async function main() {
     STATE.canvas = document.getElementById("glCanvas");
     STATE.gl = STATE.canvas.getContext("webgl2");
@@ -281,6 +345,7 @@ async function main() {
     STATE.gl.clearColor(0.0, 0.1, 0.2, 1.0);
     STATE.gl.enable(STATE.gl.DEPTH_TEST);
 
+    // Shader kaynaklarını yükle
     const vertexSrc = await loadShaderSource("shaders/vertex.glsl");
     const fragmentSrc = await loadShaderSource("shaders/fragment.glsl");
     const vertexShader = compileShader(STATE.gl, vertexSrc, STATE.gl.VERTEX_SHADER);
@@ -291,6 +356,9 @@ async function main() {
     STATE.gl.useProgram(STATE.program);
 
     // Uniform locations
+    STATE.aPositionLoc = STATE.gl.getAttribLocation(STATE.program, "aPosition");
+    STATE.aNormalLoc = STATE.gl.getAttribLocation(STATE.program, "aNormal");
+    STATE.aColorLoc = STATE.gl.getAttribLocation(STATE.program, "aColor");
     STATE.uModelLoc = STATE.gl.getUniformLocation(STATE.program, "uModel");
     STATE.uViewLoc = STATE.gl.getUniformLocation(STATE.program, "uView");
     STATE.uProjectionLoc = STATE.gl.getUniformLocation(STATE.program, "uProjection");
@@ -300,12 +368,40 @@ async function main() {
     STATE.uTorchLightPosLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchLightPos");
     STATE.uTorchLightIntensityLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchLightIntensity");
     STATE.uTorchHoveredLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchHovered");
-
-    // **Spotlight için eklenen uniformlar**
     STATE.uTorchLightColorLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchLightColor");
-    STATE.uTorchDirectionLoc  = STATE.gl.getUniformLocation(STATE.program, "uTorchDirection");
+    STATE.uTorchDirectionLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchDirection");
 
-    // Setup projection and view
+    // ====================
+    // 1) BOT (OBJ) MODELİNİ YÜKLE
+    // ====================
+    // Dikkat: Yoluna göre düzenle!
+    const botModel = await loadOBJWithMTL('assets/models/woodBoat.obj', 'assets/models/woodBoat.mtl');
+    const shipVAO = STATE.gl.createVertexArray();
+    STATE.gl.bindVertexArray(shipVAO);
+
+    const vbo = STATE.gl.createBuffer();
+    STATE.gl.bindBuffer(STATE.gl.ARRAY_BUFFER, vbo);
+    STATE.gl.bufferData(STATE.gl.ARRAY_BUFFER, botModel.vertices, STATE.gl.STATIC_DRAW);
+
+    const ebo = STATE.gl.createBuffer();
+    STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, ebo);
+    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, botModel.indices, STATE.gl.STATIC_DRAW);
+
+    // Pozisyon: 0-2, Normal: 3-5, Renk: 6-8 (toplam 9 float)
+    const aPositionLoc = STATE.gl.getAttribLocation(STATE.program, "aPosition");
+    const aNormalLoc = STATE.gl.getAttribLocation(STATE.program, "aNormal");
+    const aColorLoc = STATE.gl.getAttribLocation(STATE.program, "aColor");
+
+    STATE.gl.enableVertexAttribArray(aPositionLoc);
+    STATE.gl.vertexAttribPointer(aPositionLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 0);
+    STATE.gl.enableVertexAttribArray(aNormalLoc);
+    STATE.gl.vertexAttribPointer(aNormalLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 3 * 4);
+    STATE.gl.enableVertexAttribArray(aColorLoc);
+    STATE.gl.vertexAttribPointer(aColorLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 6 * 4);
+
+    STATE.shipVAO = shipVAO;
+    STATE.shipIndexCount = botModel.indices.length;
+
     const viewMatrix = STATE.mat4.create();
     const projectionMatrix = STATE.mat4.create();
     STATE.mat4.lookAt(viewMatrix, STATE.vec3.fromValues(0, 2, 8), STATE.vec3.fromValues(0, 0, 0), STATE.vec3.fromValues(0, 1, 0));
@@ -314,29 +410,55 @@ async function main() {
     STATE.gl.uniformMatrix4fv(STATE.uProjectionLoc, false, projectionMatrix);
 
     // Torch VAO/VBO/EBO
-    STATE.torchVAO = STATE.gl.createVertexArray();
-    STATE.gl.bindVertexArray(STATE.torchVAO);
+    // Meşale (OBJ+MTL) Modelini yükle
+    const torchModel = await loadOBJWithMTL('assets/models/torch.obj', 'assets/models/torch.mtl');
+    const torchVAO = STATE.gl.createVertexArray();
+    STATE.gl.bindVertexArray(torchVAO);
+
     const torchVBO = STATE.gl.createBuffer();
     STATE.gl.bindBuffer(STATE.gl.ARRAY_BUFFER, torchVBO);
-    STATE.gl.bufferData(STATE.gl.ARRAY_BUFFER, torchVertices, STATE.gl.STATIC_DRAW);
+    STATE.gl.bufferData(STATE.gl.ARRAY_BUFFER, torchModel.vertices, STATE.gl.STATIC_DRAW);
+
     const torchEBO = STATE.gl.createBuffer();
     STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, torchEBO);
-    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, torchIndices, STATE.gl.STATIC_DRAW);
-    const aPositionLoc = STATE.gl.getAttribLocation(STATE.program, "aPosition");
-    STATE.gl.enableVertexAttribArray(aPositionLoc);
-    STATE.gl.vertexAttribPointer(aPositionLoc, 3, STATE.gl.FLOAT, false, 0, 0);
+    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, torchModel.indices, STATE.gl.STATIC_DRAW);
 
-    // Cube (ship) VAO/VBO/EBO
-    STATE.cubeVAO = STATE.gl.createVertexArray();
-    STATE.gl.bindVertexArray(STATE.cubeVAO);
-    const vbo = STATE.gl.createBuffer();
-    STATE.gl.bindBuffer(STATE.gl.ARRAY_BUFFER, vbo);
-    STATE.gl.bufferData(STATE.gl.ARRAY_BUFFER, cubeVertices, STATE.gl.STATIC_DRAW);
-    const ebo = STATE.gl.createBuffer();
-    STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, ebo);
-    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, cubeIndices, STATE.gl.STATIC_DRAW);
+    // Pozisyon: 0-2, Normal: 3-5, Renk: 6-8 (toplam 9 float)
     STATE.gl.enableVertexAttribArray(aPositionLoc);
-    STATE.gl.vertexAttribPointer(aPositionLoc, 3, STATE.gl.FLOAT, false, 0, 0);
+    STATE.gl.vertexAttribPointer(aPositionLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 0);
+    STATE.gl.enableVertexAttribArray(aNormalLoc);
+    STATE.gl.vertexAttribPointer(aNormalLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 3 * 4);
+    STATE.gl.enableVertexAttribArray(aColorLoc);
+    STATE.gl.vertexAttribPointer(aColorLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 6 * 4);
+
+    STATE.torchVAO = torchVAO;
+    STATE.torchIndexCount = torchModel.indices.length;
+
+    // main.js -> main() fonksiyonunda ship/torch gibi yükle
+    const pillarsModel = await loadOBJWithMTL('assets/models/pillars.obj', 'assets/models/pillars.mtl');
+    const pillarsVAO = STATE.gl.createVertexArray();
+    STATE.gl.bindVertexArray(pillarsVAO);
+
+    const pillarsVBO = STATE.gl.createBuffer();
+    STATE.gl.bindBuffer(STATE.gl.ARRAY_BUFFER, pillarsVBO);
+    STATE.gl.bufferData(STATE.gl.ARRAY_BUFFER, pillarsModel.vertices, STATE.gl.STATIC_DRAW);
+
+    const pillarsEBO = STATE.gl.createBuffer();
+    STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, pillarsEBO);
+    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, pillarsModel.indices, STATE.gl.STATIC_DRAW);
+
+    STATE.gl.enableVertexAttribArray(aPositionLoc);
+    STATE.gl.vertexAttribPointer(aPositionLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 0);
+    STATE.gl.enableVertexAttribArray(aNormalLoc);
+    STATE.gl.vertexAttribPointer(aNormalLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 3 * 4);
+    STATE.gl.enableVertexAttribArray(aColorLoc);
+    STATE.gl.vertexAttribPointer(aColorLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 6 * 4);
+
+    STATE.pillarsVAO = pillarsVAO;
+    STATE.pillarsIndexCount = pillarsModel.indices.length;
+
+
+
 
     STATE.canvas.addEventListener("click", (event) => {
         STATE.canvas.requestPointerLock();
@@ -367,31 +489,28 @@ async function main() {
             console.log("Torch lit!");
         }
     });
+    drawScene();
 
-    requestAnimationFrame(drawScene);
 }
 
-function createAndDrawObject(vertices, indices, modelMatrix) {
-    const gl = STATE.gl;
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
+function isLookingAtRlyeh() {
+    for (const pos of pillarPositions) {
+        const toPillar = STATE.vec3.create();
+        STATE.vec3.sub(toPillar, pos, STATE.shipPosition);
+        STATE.vec3.normalize(toPillar, toPillar);
 
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+        // Dot product, açı hesaplama
+        const dot = STATE.vec3.dot(STATE.cameraFront, toPillar);
+        const angle = Math.acos(dot) * 180 / Math.PI; // derece cinsinden
 
-    const ebo = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+        const distance = STATE.vec3.distance(STATE.shipPosition, pos);
 
-    const aPositionLoc = gl.getAttribLocation(STATE.program, "aPosition");
-    gl.enableVertexAttribArray(aPositionLoc);
-    gl.vertexAttribPointer(aPositionLoc, 3, gl.FLOAT, false, 0, 0);
-
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
-    gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+        if (distance < 30.0 && angle < 30) {
+            return true; // En az bir sütun için trigger!
+        }
+    }
+    return false;
 }
-
 
 function drawScene() {
     const gl = STATE.gl;
@@ -414,7 +533,7 @@ function drawScene() {
     // 2. View ve kamera ayarı (her zaman aynı)
     let cameraPosition = STATE.vec3.clone(STATE.shipPosition);
     cameraPosition[1] += 1.2;
-    cameraPosition[2] += 1.5;
+    cameraPosition[2] += 0.3;
     let target = STATE.vec3.create();
     STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
 
@@ -427,10 +546,21 @@ function drawScene() {
 
     // 4. Torch model matrix (FPS modunda scale uygula)
     STATE.mat4.identity(STATE.torchMatrix);
-    STATE.mat4.translate(STATE.torchMatrix, STATE.torchMatrix, torchPos);
-    if (STATE.torchControlMode && STATE.torchLit) {
-        STATE.mat4.scale(STATE.torchMatrix, STATE.torchMatrix, [0.15, 0.15, 0.15]);
-    }
+    // 1. Pozisyon: Botun sağ tarafı (örneğin x = +1.0 yan)
+    STATE.mat4.translate(STATE.torchMatrix, STATE.torchMatrix, [
+        STATE.shipPosition[0] + 1.0,  // sağda (x artır)
+        STATE.shipPosition[1] + 0.6,  // biraz yukarıda
+        STATE.shipPosition[2] - 1.1   // botun hemen yanında, biraz arkada (z azalt)
+    ]);
+
+    // 2. Döndür: Meşale modelinin ekseni kameraya bakacaksa veya botun eksenine paralel olacaksa
+    // Dikeyleştir: Eğer meşale yatay duruyorsa, X veya Z etrafında 90 derece döndürülür
+    // NOT: Eğer meşale modeli baştan dikey geliyorsa, bu satırı kaldır.
+    STATE.mat4.rotateX(STATE.torchMatrix, STATE.torchMatrix, -Math.PI / 2);
+
+    // 3. İsteğe bağlı: Küçült (model büyükse)
+    STATE.mat4.scale(STATE.torchMatrix, STATE.torchMatrix, [0.8, 1.1, 1.2]);
+
 
     // 5. Uniform'lar ve temizlik
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -446,47 +576,69 @@ function drawScene() {
     gl.uniform3fv(STATE.uTorchDirectionLoc, STATE.cameraFront);
 
     // 6. Awakening: pillar ve cthulhu hareketleri
-    if (!STATE.awakeningStarted && STATE.vec3.distance(STATE.shipPosition, STATE.rlyehCenter) < 5.0) {
-        STATE.awakeningStarted = true;
-        console.log("The Awakening Begins!");
+    if (!STATE.awakeningStarted && isLookingAtRlyeh()) {
+    STATE.awakeningStarted = true;
+    console.log("The Awakening Begins!");
+}
+    if (STATE.awakeningStarted && pillarsRiseY  < pillarsMaxRiseY) {
+        pillarsRiseY += pillarsRiseSpeed;
     }
-    if (STATE.awakeningStarted && STATE.cthulhuRiseY < STATE.maxRiseY) {
-        STATE.mat4.translate(pillar1Matrix, pillar1Matrix, [0, STATE.riseSpeed, 0]);
-        STATE.mat4.translate(pillar2Matrix, pillar2Matrix, [0, STATE.riseSpeed, 0]);
-        STATE.mat4.translate(cthulhuHeadMatrix, cthulhuHeadMatrix, [0, STATE.riseSpeed, 0]);
-        STATE.mat4.translate(cthulhuBodyMatrix, cthulhuBodyMatrix, [0, STATE.riseSpeed, 0]);
-        STATE.cthulhuRiseY += STATE.riseSpeed;
-    }
-
-    // 7. Ship çizimi
-    gl.uniform1i(STATE.uIsTorchLoc, 0);
-    gl.uniform1i(STATE.uTorchHoveredLoc, 0);
-    gl.bindVertexArray(STATE.cubeVAO);
+    // Torch çizimi
+    STATE.gl.bindVertexArray(STATE.torchVAO);
+    STATE.gl.uniformMatrix4fv(STATE.uModelLoc, false, STATE.torchMatrix);
+    STATE.gl.uniform1i(STATE.uIsTorchLoc, 1); // (Shader'da torch için özel davranış varsa)
+    STATE.gl.drawElements(STATE.gl.TRIANGLES, STATE.torchIndexCount, STATE.gl.UNSIGNED_SHORT, 0);
+    STATE.gl.uniform1i(STATE.uIsTorchLoc, 0);
+    // (7. Ship çizimi)
+    // YENİ: Küp yerine shipVAO ve shipIndexCount ile çiz
+    STATE.gl.bindVertexArray(STATE.shipVAO);
     const modelMatrix = STATE.mat4.create();
     STATE.mat4.translate(modelMatrix, modelMatrix, STATE.shipPosition);
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
-    gl.drawElements(gl.TRIANGLES, cubeIndices.length, gl.UNSIGNED_SHORT, 0);
+    STATE.mat4.rotateX(modelMatrix, modelMatrix, Math.PI / 2);
+    STATE.mat4.rotateY(modelMatrix, modelMatrix, Math.PI);
+    STATE.gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
+    STATE.gl.drawElements(STATE.gl.TRIANGLES, STATE.shipIndexCount, STATE.gl.UNSIGNED_SHORT, 0);
 
-    // 8. Torch çizimi
-    gl.uniform1i(STATE.uIsTorchLoc, 1);
-    gl.uniform1i(STATE.uTorchHoveredLoc, STATE.torchHovered ? 1 : 0);
-    gl.bindVertexArray(STATE.torchVAO);
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, STATE.torchMatrix);
-    gl.drawElements(gl.TRIANGLES, torchIndices.length, gl.UNSIGNED_SHORT, 0);
+    for (let i = 0; i < pillarPositions.length; i++) {
+    const base = pillarPositions[i];
+    const pillarsMatrix = STATE.mat4.create();
+    STATE.mat4.translate(pillarsMatrix, pillarsMatrix, [
+        base[0], 
+        base[1] + pillarsRiseY, 
+        base[2]
+    ]);
+    STATE.mat4.scale(pillarsMatrix, pillarsMatrix, [500.2, 500.2, 500.2]);
+    STATE.mat4.rotateX(pillarsMatrix, pillarsMatrix, Math.PI / 2);
+    STATE.mat4.rotateZ(pillarsMatrix, pillarsMatrix, Math.PI / 2);
 
-    // 9. Pillar ve cthulhu
-    gl.uniform1i(STATE.uIsTorchLoc, 0);
-    gl.uniform1i(STATE.uTorchHoveredLoc, 0);
-    createAndDrawObject(pillarVertices, pillarIndices, pillar1Matrix);
-    createAndDrawObject(pillarVertices, pillarIndices, pillar2Matrix);
-    createAndDrawObject(sphereVertices, sphereIndices, cthulhuHeadMatrix);
-    createAndDrawObject(coneVertices, coneIndices, cthulhuBodyMatrix);
+    STATE.gl.bindVertexArray(STATE.pillarsVAO);
+    STATE.gl.uniformMatrix4fv(STATE.uModelLoc, false, pillarsMatrix);
+    STATE.gl.drawElements(STATE.gl.TRIANGLES, STATE.pillarsIndexCount, STATE.gl.UNSIGNED_SHORT, 0);
+}
 
     requestAnimationFrame(drawScene);
 }
+function createAndDrawObject(vertices, indices, modelMatrix) {
+    const gl = STATE.gl;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
 
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
-// Helpers
+    const ebo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+    const aPositionLoc = gl.getAttribLocation(STATE.program, "aPosition");
+    gl.enableVertexAttribArray(aPositionLoc);
+    gl.vertexAttribPointer(aPositionLoc, 3, gl.FLOAT, false, 0, 0);
+
+    gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
+    gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+}
+
 async function loadShaderSource(url) {
     const response = await fetch(url);
     return await response.text();
@@ -542,6 +694,9 @@ function rayIntersectsSphere(rayOrigin, rayDir, sphereCenter, radius) {
     const d2 = STATE.vec3.dot(L, L) - tca * tca;
     return d2 <= radius * radius;
 }
+// ========
+// Shader Load/Compile helpers, event handlers, diğer fonksiyonlar burada mevcut (aynı kalabilir)
+// ========
 
-// Start
+// Başlat!
 main();
