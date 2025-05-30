@@ -1,22 +1,37 @@
 #version 300 es
 precision mediump float;
 
-in vec3 aPosition;
-in vec3 aNormal;
-in vec3 aColor;
+// ATTRIBS
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec3 aColor;
+layout(location = 3) in vec2 aTexCoord;   // <-- UV
 
+// UNIFORMS
 uniform mat4 uModel;
 uniform mat4 uView;
 uniform mat4 uProjection;
 
-out vec3 vPosition;
-out vec3 vNormal;
+// VARYING
 out vec3 vColor;
+out vec3 vNormal;
+out vec3 vFragPos;
+out vec2 vTexCoord;
 
 void main() {
-    vec4 worldPos = uModel * vec4(aPosition, 1.0);
-    vPosition = worldPos.xyz;
-    vNormal = normalize(mat3(uModel) * aNormal);
+    // World pos
+    vec4 worldPosition = uModel * vec4(aPosition, 1.0);
+    vFragPos = worldPosition.xyz;
+
+    // Normal (model matrisinin üst sol 3x3'ü)
+    vNormal = mat3(uModel) * aNormal;
+
+    // Vertex color (obj/mtl yoksa [1,1,1] gelir)
     vColor = aColor;
-    gl_Position = uProjection * uView * worldPos;
+
+    // Texture UV (her zaman ilet, obj'de yoksa [0,0] olur)
+    vTexCoord = aTexCoord;
+
+    // Kamera projeksiyonu
+    gl_Position = uProjection * uView * worldPosition;
 }

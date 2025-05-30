@@ -35,6 +35,95 @@
         z-index: 10;
         pointer-events: none;
       }
+      /* Controls Guide Styles */
+      #controls-guide-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 9999;
+        font-family: 'Segoe UI', Arial, sans-serif;
+      }
+      #controls-guide-toggle {
+        width: 38px;
+        height: 38px;
+        background: #222d;
+        color: #fff;
+        border-radius: 50%;
+        font-size: 1.6em;
+        text-align: center;
+        line-height: 38px;
+        cursor: pointer;
+        box-shadow: 0 2px 12px #0005;
+        transition: background 0.2s;
+        user-select: none;
+        position: absolute;
+        right: 0; bottom: 0;
+      }
+      #controls-guide-toggle:hover {
+        background: #555e;
+      }
+      #controls-guide {
+        background: #191c24f6;
+        color: #fff;
+        border-radius: 18px;
+        padding: 20px 28px 16px 28px;
+        box-shadow: 0 4px 32px #000a;
+        min-width: 320px;
+        max-width: 350px;
+        font-size: 1.06em;
+        position: absolute;
+        bottom: 50px;
+        right: 0;
+        animation: popupfade 0.2s;
+        display: block;
+      }
+      #controls-guide h3 {
+        margin-top: 0;
+        font-size: 1.15em;
+        letter-spacing: 1px;
+      }
+      #controls-guide ul {
+        padding-left: 20px;
+        margin: 10px 0 10px 0;
+      }
+      #controls-guide li {
+        margin-bottom: 8px;
+      }
+      #controls-close-btn {
+        margin-top: 8px;
+        background: #2e436a;
+        color: #fff;
+        border: none;
+        border-radius: 7px;
+        padding: 7px 20px;
+        cursor: pointer;
+        font-size: 1em;
+        float: right;
+      }
+      @keyframes popupfade {
+        from { opacity: 0; transform: scale(0.85);}
+        to { opacity: 1; transform: scale(1);}
+      }
+      /* Compass interaction warning */
+      #compass-warning {
+        position: fixed;
+        top: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(20, 20, 30, 0.96);
+        color: #ffe684;
+        font-size: 1.4em;
+        font-weight: bold;
+        padding: 18px 40px 15px 40px;
+        border-radius: 18px;
+        box-shadow: 0 4px 32px #000a;
+        z-index: 10000;
+        letter-spacing: 0.5px;
+        border: 2px solid #fff3;
+        text-align: center;
+        max-width: 95vw;
+        min-width: 340px;
+      }
     </style>
 </head>
 <body>
@@ -43,7 +132,45 @@
       Torch Control: <span id="torch-mode">OFF</span><br>
       Brightness: <span id="torch-brightness">1.0</span>
     </div>
+    <!-- Compass movement warning (hide after compass interaction in JS) -->
+    <div id="compass-warning">
+      To move the boat, first interact with the <b>compass</b>!
+    </div>
+    <!-- Controls Guide -->
+    <div id="controls-guide-container">
+      <div id="controls-guide-toggle" onclick="toggleControlsGuide()">?</div>
+      <div id="controls-guide">
+        <h3>Controls Guide</h3>
+        <ul>
+          <li><b>W / A / S / D</b>: Move Forward / Left / Backward / Right</li>
+          <li><b>Mouse</b>: Look Around</li>
+          <li><b>Click Torch</b>: Light the torch (after awakening)</li>
+          <li><b>Click Compass</b>: Inspect compass (rotate with WASD / Arrow keys, <b>C</b> to exit)</li>
+          <li><b>M</b>: FPS Torch Mode ON/OFF (after lighting)</li>
+          <li><b>Mouse Wheel</b>: Adjust torch brightness (in FPS mode)</li>
+          <li><b>H</b>: Show/Hide Controls Guide</li>
+          <li><b>R</b>: Reset Scene</li>
+          <li><b>ESC</b>: Release Mouse</li>
+        </ul>
+        <button onclick="toggleControlsGuide()" id="controls-close-btn">Close</button>
+      </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.3/gl-matrix-min.js"></script>
     <script src="main.js"></script>
+    <script>
+      function toggleControlsGuide() {
+        const guide = document.getElementById('controls-guide');
+        guide.style.display = (guide.style.display === 'none') ? 'block' : 'none';
+      }
+      // H OPEN/CLOSE
+      window.addEventListener('keydown', function(e) {
+        if (e.key.toLowerCase() === 'h') toggleControlsGuide();
+      });
+      // Hide compass warning after compass is inspected (call from main.js)
+      window.hideCompassWarning = function() {
+        const el = document.getElementById('compass-warning');
+        if (el) el.style.display = 'none';
+      }
+    </script>
 </body>
 </html>

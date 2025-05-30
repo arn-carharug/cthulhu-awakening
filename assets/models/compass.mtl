@@ -1,0 +1,23 @@
+# Blender 4.4.3 MTL File: 'None'
+# www.blender.org
+
+newmtl bodyMat
+Ns 39.999996
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd D:/MyProjects/cthulhu-awakening/assets/textures/OC1KI90.jpg
+map_Bump D:/MyProjects/cthulhu-awakening/assets/textures/OC1KI90.jpg
+
+newmtl needleMat
+Ns 79.999985
+Ka 1.000000 1.000000 1.000000
+Kd 1.000000 0.100000 0.100000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
