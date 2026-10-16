@@ -23,6 +23,14 @@ async function validate() {
     vm.runInThisContext(effectsSource, { filename: 'environment-effects.js' });
     const weatherSource = await fs.readFile(path.join(root, 'js', 'weather-system.js'), 'utf8');
     vm.runInThisContext(weatherSource, { filename: 'weather-system.js' });
+    const audioSource = await fs.readFile(path.join(root, 'js', 'audio-system.js'), 'utf8');
+    vm.runInThisContext(audioSource, { filename: 'audio-system.js' });
+
+    const ritualAudio = new RitualAudioSystem();
+    ritualAudio.setVolume(0.5);
+    assert.ok(ritualAudio.outputGain() > 0.5, 'audio mix does not provide sufficient gain');
+    ritualAudio.setVolume(2);
+    assert.equal(ritualAudio.volume, 1, 'audio volume did not clamp to its maximum');
 
     const dustMesh = EnvironmentEffects.createDustField(120);
     assert.equal(dustMesh.length, 120 * 11, 'particle mesh layout is invalid');
@@ -80,7 +88,7 @@ async function validate() {
     const requiredFiles = [
         'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js',
         'js/performance-monitor.js', 'js/debug-panel.js', 'js/environment-effects.js',
-        'js/weather-system.js',
+        'js/weather-system.js', 'js/audio-system.js', 'js/ritual-presentation.js',
         'shaders/vertex.glsl', 'shaders/fragment.glsl',
         'assets/textures/WeatheredWood2_S.jpg', 'assets/textures/OC1KI90.jpg',
         'assets/textures/germany010.jpg', 'assets/textures/beautiful-photo-sea-waves.jpg',

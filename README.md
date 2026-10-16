@@ -38,6 +38,8 @@ Then open [http://localhost:8000](http://localhost:8000).
 | Click torch | Light it after the awakening completes |
 | M | Toggle FPS torch mode |
 | Mouse wheel | Adjust brightness in FPS torch mode |
+| N | Toggle procedural ritual sound |
+| Volume control | Adjust the complete sound mix from 0–100 |
 | H | Toggle the controls guide |
 | F2 | Toggle developer diagnostics |
 | R | Reset the complete scene |
@@ -56,6 +58,8 @@ js/performance-monitor.js  FPS and frame-time diagnostics
 js/debug-panel.js          F2 developer controls
 js/environment-effects.js Procedural atmospheric particles
 js/weather-system.js      Deterministic lightning and storm timing
+js/audio-system.js        Procedural wind, rumble, thunder, and heartbeat
+js/ritual-presentation.js Cinematic captions, progress, and ending state
 shaders/vertex.glsl        World transforms and normal handling
 shaders/fragment.glsl      Material and torch lighting
 assets/models/             OBJ and MTL scene models
@@ -81,6 +85,11 @@ assets/textures/           Textures used by the active scene
 - Lightning flashes intensify during the awakening and affect both objects and sky color.
 - Ritual IV stages the awakening through an erratic compass, rising seas, restrained camera tremors, scripted lightning, a shadow-first Cthulhu reveal, and emissive eyes.
 - The final reveal briefly destabilizes the lantern and exposes the creature during a forced storm flash.
+- Ritual V adds event-synchronized procedural audio, restrained narrative captions, an awakening progress trace, and a replayable ending card.
+- The audio mix uses an audible mid-bass rumble and a dynamics compressor so laptop speakers remain effective at high volume settings.
+- The ending now requires the player to hold the lantern on Cthulhu's eyes for four seconds; losing aim gently drains progress instead of blocking exploration.
+- The completed ending can be dismissed with “Keep watching” to continue inspecting the scene.
+- Motion-sensitive visitors inherit their operating system's reduced-motion preference.
 - Load failures stop startup with a visible error.
 
 ## Deployment

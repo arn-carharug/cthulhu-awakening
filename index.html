@@ -131,6 +131,27 @@
 <body>
     <canvas id="glCanvas" tabindex="1"></canvas>
     <div id="cinematic-overlay" aria-hidden="true"></div>
+    <div id="ritual-progress" aria-hidden="true"><span></span></div>
+    <p id="ritual-caption" role="status" aria-live="polite"></p>
+    <div id="witness-focus" hidden aria-hidden="true">
+      <span class="witness-ring"></span>
+      <span class="witness-label">Find its eyes</span>
+    </div>
+    <div id="audio-controls" aria-label="Audio controls">
+      <button id="sound-toggle" type="button" aria-pressed="false">Sound: dormant</button>
+      <label for="volume-control">Volume</label>
+      <input id="volume-control" type="range" min="0" max="100" step="1" value="70">
+      <output id="volume-value" for="volume-control">70</output>
+    </div>
+    <section id="ending-card" hidden aria-labelledby="ending-title">
+      <p class="ending-kicker">Ritual V · The Last Witness</p>
+      <h1 id="ending-title">The Ancient One Has Awakened</h1>
+      <p>The sea remembers. So do you.</p>
+      <div class="ending-actions">
+        <button id="ending-continue" type="button">Keep watching</button>
+        <button id="ending-restart" type="button">Witness it again</button>
+      </div>
+    </section>
     <div id="loading-screen" role="status" aria-live="polite">
       <div class="loading-title">The sea is stirring…</div>
       <div id="loading-status">Loading shaders and artifacts</div>
@@ -180,6 +201,7 @@
           <li><b>Click Compass</b>: Inspect compass (rotate with WASD / Arrow keys, <b>C</b> to exit)</li>
           <li><b>M</b>: FPS Torch Mode ON/OFF (after lighting)</li>
           <li><b>Mouse Wheel</b>: Adjust torch brightness (in FPS mode)</li>
+          <li><b>N</b>: Toggle ritual sound</li>
           <li><b>H</b>: Show/Hide Controls Guide</li>
           <li><b>F2</b>: Show/Hide Developer Diagnostics</li>
           <li><b>R</b>: Reset Scene</li>
@@ -204,6 +226,8 @@
     <script src="js/performance-monitor.js"></script>
     <script src="js/environment-effects.js"></script>
     <script src="js/weather-system.js"></script>
+    <script src="js/audio-system.js"></script>
+    <script src="js/ritual-presentation.js"></script>
     <script src="js/asset-loader.js"></script>
     <script src="main.js"></script>
     <script src="js/debug-panel.js"></script>

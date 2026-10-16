@@ -4,6 +4,8 @@ const {
     awakening: awakeningConfig, torch: torchConfig, ocean: oceanConfig
 } = window.GameConfig;
 const sceneEvents = new window.SceneRuntime.EventBus();
+const ritualAudio = new window.RitualAudioSystem();
+const ritualPresentation = new window.RitualPresentation(sceneEvents);
 const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
     duration: awakeningConfig.duration,
     events: sceneEvents,
@@ -96,6 +98,7 @@ const STATE = {
     boatMotion: { bob: 0, roll: 0, pitch: 0 },
     lightning: new window.WeatherSystem.LightningSystem(),
     cinematic: { compassSpin: false, surge: false, eyes: false, shake: 0, torchShock: 0 },
+    witness: { active: false, focus: 0, complete: false },
 };
 
 sceneEvents.on('awakening:rumble', () => { STATE.cinematic.shake = 0.18; });
@@ -111,6 +114,47 @@ sceneEvents.on('awakening:reveal', () => {
     STATE.lightning.strike(2.15);
     STATE.cinematic.shake = 0.72;
     STATE.cinematic.torchShock = 1;
+});
+[
+    'awakening:rumble', 'awakening:presence', 'awakening:flash',
+    'awakening:eyes', 'awakening:reveal'
+].forEach((name) => sceneEvents.on(name, () => ritualAudio.cue(name)));
+sceneEvents.on('timeline:update', ({ progress }) => ritualAudio.setAwakening(progress));
+sceneEvents.on('timeline:complete', () => { STATE.witness.active = true; });
+
+const soundToggle = document.getElementById('sound-toggle');
+const volumeControl = document.getElementById('volume-control');
+const volumeValue = document.getElementById('volume-value');
+let initialVolume = 70;
+try {
+    const savedVolumeRaw = localStorage.getItem('ritual-volume');
+    const savedVolume = Number(savedVolumeRaw);
+    if (savedVolumeRaw !== null && Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 100) initialVolume = savedVolume;
+} catch {
+    // Storage is optional; audio controls still work for the current session.
+}
+volumeControl.value = String(initialVolume);
+volumeValue.textContent = String(initialVolume);
+ritualAudio.setVolume(initialVolume / 100);
+ritualAudio.onStateChange = ({ enabled, muted, volume }) => {
+    const percentage = Math.round(volume * 100);
+    soundToggle.textContent = percentage === 0 ? 'Sound: silent' : enabled && !muted ? 'Sound: awake' : 'Sound: dormant';
+    soundToggle.setAttribute('aria-pressed', String(enabled && !muted && percentage > 0));
+    volumeValue.textContent = String(percentage);
+};
+soundToggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    ritualAudio.toggle();
+});
+volumeControl.addEventListener('input', () => {
+    const percentage = Number(volumeControl.value);
+    ritualAudio.setVolume(percentage / 100);
+    try { localStorage.setItem('ritual-volume', String(percentage)); } catch { /* optional */ }
+});
+document.getElementById('ending-restart').addEventListener('click', () => resetScene());
+document.getElementById('ending-continue').addEventListener('click', () => {
+    ritualPresentation.dismissEnding();
+    STATE.canvas?.requestPointerLock?.();
 });
 // Add right after STATE:
 let pillarsRiseY = 0;
@@ -344,6 +388,11 @@ window.addEventListener("keydown", (e) => {
 
     if (e.key.toLowerCase() === 'r') {
         resetScene();
+        return;
+    }
+
+    if (e.key.toLowerCase() === 'n') {
+        ritualAudio.toggle();
         return;
     }
 
@@ -749,6 +798,7 @@ async function main() {
 
     // Canvas eventleri vs. aynı kalacak...
     STATE.canvas.addEventListener("click", (event) => {
+        if (!ritualAudio.enabled) ritualAudio.enable();
         let interactionHandled = false;
 
         // Resolve the interaction before requesting pointer lock. Pointer-lock
@@ -903,7 +953,10 @@ function resetScene() {
     STATE.boatMotion = { bob: 0, roll: 0, pitch: 0 };
     STATE.lightning.reset();
     STATE.cinematic = { compassSpin: false, surge: false, eyes: false, shake: 0, torchShock: 0 };
+    STATE.witness = { active: false, focus: 0, complete: false };
     STATE.awakeningTimeline.reset();
+    ritualAudio.reset();
+    ritualPresentation.reset();
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
     window.showCompassWarning?.();
@@ -999,6 +1052,42 @@ function getTorchLightWorldPosition() {
     const emitter = STATE.vec3.fromValues(transformedOrigin[0], transformedOrigin[1], transformedOrigin[2]);
     STATE.vec3.scaleAndAdd(emitter, emitter, STATE.cameraFront, 0.22);
     return emitter;
+}
+
+function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
+    if (!STATE.awakeningTimeline.complete || STATE.witness.complete) return;
+    STATE.witness.active = true;
+
+    const headLocal = STATE.vec4.fromValues(0, 1.55, 1.39, 1);
+    const headWorld = STATE.vec4.create();
+    STATE.vec4.transformMat4(headWorld, headLocal, cthulhuMatrix);
+    const cameraPosition = getCameraPosition();
+    const toHead = STATE.vec3.fromValues(
+        headWorld[0] - cameraPosition[0],
+        headWorld[1] - cameraPosition[1],
+        headWorld[2] - cameraPosition[2]
+    );
+    STATE.vec3.normalize(toHead, toHead);
+
+    const alignment = STATE.vec3.dot(STATE.cameraFront, toHead);
+    const locked = STATE.torchLit && alignment > 0.965;
+    if (locked) {
+        STATE.witness.focus = Math.min(1, STATE.witness.focus + deltaSeconds / 4);
+    } else {
+        STATE.witness.focus = Math.max(0, STATE.witness.focus - deltaSeconds * 0.12);
+    }
+
+    const status = !STATE.torchLit ? 'unlit' : locked ? 'locked' : 'searching';
+    ritualPresentation.updateWitness(STATE.witness.focus, status);
+
+    if (STATE.witness.focus >= 1) {
+        STATE.witness.complete = true;
+        STATE.lightning.strike(1.85);
+        STATE.cinematic.shake = 0.42;
+        STATE.cinematic.torchShock = 0.65;
+        ritualAudio.cue('awakening:reveal');
+        ritualPresentation.completeWitness();
+    }
 }
 
 function drawScene(timestamp) {
@@ -1306,7 +1395,7 @@ function drawScene(timestamp) {
     if (STATE.cinematic.eyes && STATE.eyeVAO) {
         const eyeAge = Math.max(0, STATE.awakeningTimeline.elapsed - 29);
         const eyeIntensity = Math.min(1, eyeAge / 2.5)
-            * (0.78 + Math.sin(STATE.elapsedTime * 5.2) * 0.16 + lightningIntensity * 0.35);
+            * (0.78 + Math.sin(STATE.elapsedTime * 5.2) * 0.16 + lightningIntensity * 0.35 + STATE.witness.focus * 0.8);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
         gl.depthMask(false);
@@ -1320,6 +1409,8 @@ function drawScene(timestamp) {
         gl.depthMask(true);
         gl.disable(gl.BLEND);
     }
+
+    updateWitnessPhase(deltaSeconds, cthulhuMatrix);
 
     // === DUST / MOISTURE PARTICLES ===
     if (STATE.effects.particles) {
