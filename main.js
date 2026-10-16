@@ -6,6 +6,7 @@ const {
 const sceneEvents = new window.SceneRuntime.EventBus();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
+const ritualCycle = new window.RitualCycle(sceneEvents);
 const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
     duration: awakeningConfig.duration,
     events: sceneEvents,
@@ -957,6 +958,7 @@ function resetScene() {
     STATE.awakeningTimeline.reset();
     ritualAudio.reset();
     ritualPresentation.reset();
+    ritualCycle.start(true);
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
     window.showCompassWarning?.();
@@ -1078,6 +1080,7 @@ function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
     }
 
     const status = !STATE.torchLit ? 'unlit' : locked ? 'locked' : 'searching';
+    ritualCycle.updateWitness(deltaSeconds, locked, STATE.torchLit);
     ritualPresentation.updateWitness(STATE.witness.focus, status);
 
     if (STATE.witness.focus >= 1) {
@@ -1086,6 +1089,7 @@ function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
         STATE.cinematic.shake = 0.42;
         STATE.cinematic.torchShock = 0.65;
         ritualAudio.cue('awakening:reveal');
+        sceneEvents.emit('witness:complete');
         ritualPresentation.completeWitness();
     }
 }

@@ -60,6 +60,7 @@ js/environment-effects.js Procedural atmospheric particles
 js/weather-system.js      Deterministic lightning and storm timing
 js/audio-system.js        Procedural wind, rumble, thunder, and heartbeat
 js/ritual-presentation.js Cinematic captions, progress, and ending state
+js/game-loop.js           Ritual objectives, cycle tracking, and run statistics
 shaders/vertex.glsl        World transforms and normal handling
 shaders/fragment.glsl      Material and torch lighting
 assets/models/             OBJ and MTL scene models
@@ -89,6 +90,8 @@ assets/textures/           Textures used by the active scene
 - The audio mix uses an audible mid-bass rumble and a dynamics compressor so laptop speakers remain effective at high volume settings.
 - The ending now requires the player to hold the lantern on Cthulhu's eyes for four seconds; losing aim gently drains progress instead of blocking exploration.
 - The completed ending can be dismissed with “Keep watching” to continue inspecting the scene.
+- Ritual VI turns the experience into a four-step loop: read the compass, approach R'lyeh, raise the lantern, and bear witness.
+- Each completed cycle reports elapsed time, lantern focus accuracy, and the longest uninterrupted hold before allowing another run.
 - Motion-sensitive visitors inherit their operating system's reduced-motion preference.
 - Load failures stop startup with a visible error.
 

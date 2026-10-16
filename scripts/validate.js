@@ -88,7 +88,7 @@ async function validate() {
     const requiredFiles = [
         'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js',
         'js/performance-monitor.js', 'js/debug-panel.js', 'js/environment-effects.js',
-        'js/weather-system.js', 'js/audio-system.js', 'js/ritual-presentation.js',
+        'js/weather-system.js', 'js/audio-system.js', 'js/ritual-presentation.js', 'js/game-loop.js',
         'shaders/vertex.glsl', 'shaders/fragment.glsl',
         'assets/textures/WeatheredWood2_S.jpg', 'assets/textures/OC1KI90.jpg',
         'assets/textures/germany010.jpg', 'assets/textures/beautiful-photo-sea-waves.jpg',

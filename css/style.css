@@ -110,6 +110,58 @@ canvas {
     color: #789197;
 }
 
+#objective-panel {
+    position: fixed;
+    top: 86px;
+    left: 18px;
+    z-index: 11;
+    width: 210px;
+    padding: 12px 14px;
+    color: #91a39e;
+    background: linear-gradient(135deg, #071015c9, #0b1517a6);
+    border-left: 1px solid #d2b96d52;
+    font: 11px/1.35 "Segoe UI", sans-serif;
+    letter-spacing: 0.06em;
+    backdrop-filter: blur(6px);
+}
+
+.objective-heading {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 9px;
+    color: #d7c58e;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+#objective-list {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+#objective-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.42;
+    transition: color 240ms ease, opacity 240ms ease;
+}
+
+#objective-list li span {
+    width: 6px;
+    height: 6px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+}
+
+#objective-list li.active { color: #d9e1dd; opacity: 1; }
+#objective-list li.complete { color: #78958c; opacity: 0.72; text-decoration: line-through; }
+#objective-list li.complete span { background: currentColor; }
+
 #cinematic-overlay {
     position: fixed;
     inset: -10%;
@@ -323,6 +375,23 @@ body.post-disabled #cinematic-overlay {
     font: italic 1rem/1.5 Georgia, serif;
 }
 
+#ending-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(82px, 1fr));
+    gap: 1px;
+    margin: 1.2rem 0 0;
+    background: #a6bbb522;
+}
+
+#ending-stats div { padding: 0.75rem 0.9rem; background: #071012e8; }
+#ending-stats dt {
+    color: #70857f;
+    font: 600 0.58rem/1.2 "Segoe UI", sans-serif;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+#ending-stats dd { margin: 0.3rem 0 0; color: #dac894; font: 400 1rem/1 Georgia, serif; }
+
 .ending-actions {
     display: flex;
     flex-wrap: wrap;
@@ -352,4 +421,9 @@ body.post-disabled #cinematic-overlay {
 @media (prefers-reduced-motion: reduce) {
     #cinematic-overlay { animation: none; }
     #ritual-caption, #ending-card, #ritual-progress span { transition: none; }
+}
+
+@media (max-width: 640px) {
+    #objective-panel { top: 82px; width: 175px; }
+    #ending-stats { grid-template-columns: repeat(2, minmax(90px, 1fr)); }
 }

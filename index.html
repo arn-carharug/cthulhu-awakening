@@ -144,9 +144,15 @@
       <output id="volume-value" for="volume-control">70</output>
     </div>
     <section id="ending-card" hidden aria-labelledby="ending-title">
-      <p class="ending-kicker">Ritual V · The Last Witness</p>
+      <p class="ending-kicker">Ritual VI · The Cycle</p>
       <h1 id="ending-title">The Ancient One Has Awakened</h1>
       <p>The sea remembers. So do you.</p>
+      <dl id="ending-stats">
+        <div><dt>Cycle</dt><dd id="stat-cycle">I</dd></div>
+        <div><dt>Time</dt><dd id="stat-time">--:--</dd></div>
+        <div><dt>Focus</dt><dd id="stat-focus">--%</dd></div>
+        <div><dt>Best hold</dt><dd id="stat-streak">--s</dd></div>
+      </dl>
       <div class="ending-actions">
         <button id="ending-continue" type="button">Keep watching</button>
         <button id="ending-restart" type="button">Witness it again</button>
@@ -161,6 +167,15 @@
       Torch Control: <span id="torch-mode">OFF</span><br>
       Brightness: <span id="torch-brightness">0.00</span>
     </div>
+    <aside id="objective-panel" aria-label="Ritual objectives">
+      <div class="objective-heading"><span id="cycle-label">Cycle I</span><span id="objective-count">0/4</span></div>
+      <ol id="objective-list">
+        <li data-objective="compass"><span></span>Read the compass</li>
+        <li data-objective="rlyeh"><span></span>Approach R'lyeh</li>
+        <li data-objective="lantern"><span></span>Raise the lantern</li>
+        <li data-objective="witness"><span></span>Bear witness</li>
+      </ol>
+    </aside>
     <aside id="debug-panel" hidden aria-label="Scene debug controls">
       <header>Scene diagnostics <span id="performance-stats">-- FPS · -- ms</span></header>
       <label>Quality
@@ -228,6 +243,7 @@
     <script src="js/weather-system.js"></script>
     <script src="js/audio-system.js"></script>
     <script src="js/ritual-presentation.js"></script>
+    <script src="js/game-loop.js"></script>
     <script src="js/asset-loader.js"></script>
     <script src="main.js"></script>
     <script src="js/debug-panel.js"></script>
