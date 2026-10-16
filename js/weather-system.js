@@ -35,6 +35,12 @@
             return false;
         }
 
+        strike(intensity = 1.25) {
+            this.intensity = intensity;
+            this.aftershock = intensity * 0.28;
+            this.nextStrike = 2.5 + this.random() * 3.0;
+        }
+
         reset() {
             this.elapsed = 0;
             this.intensity = 0;

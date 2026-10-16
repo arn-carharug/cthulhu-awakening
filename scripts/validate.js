@@ -27,7 +27,11 @@ async function validate() {
     const dustMesh = EnvironmentEffects.createDustField(120);
     assert.equal(dustMesh.length, 120 * 11, 'particle mesh layout is invalid');
     assert.ok([...dustMesh].every(Number.isFinite), 'environment mesh contains invalid values');
+    const eyeMesh = EnvironmentEffects.createEyePoints();
+    assert.equal(eyeMesh.length, 2 * 11, 'eye mesh layout is invalid');
     const lightning = new WeatherSystem.LightningSystem(7);
+    lightning.strike(1.5);
+    assert.equal(lightning.intensity, 1.5, 'forced lightning strike is invalid');
     let lightningTriggered = false;
     for (let index = 0; index < 200; index += 1) {
         lightningTriggered = lightning.update(0.1, true) || lightningTriggered;

@@ -12,6 +12,8 @@ uniform mat4 uModel;
 uniform mat4 uView;
 uniform mat4 uProjection;
 uniform bool uIsParticle;
+uniform bool uIsEye;
+uniform float uEyeIntensity;
 uniform float uTime;
 uniform bool uIsWater;
 uniform float uWaveHeight;
@@ -46,6 +48,9 @@ void main() {
         animatedPosition.y += sin(uTime * 0.55 + aPosition.x * 0.9) * 0.18;
         animatedPosition.z += cos(uTime * 0.3 + aPosition.y) * 0.16;
         gl_PointSize = 2.2 + 2.4 * fract(aTexCoord.x * 17.0);
+    }
+    if (uIsEye) {
+        gl_PointSize = 12.0 + uEyeIntensity * 15.0;
     }
     vec4 worldPosition = uModel * vec4(animatedPosition, 1.0);
     vFragPos = worldPosition.xyz;

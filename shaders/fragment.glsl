@@ -34,9 +34,13 @@ uniform bool uPostEnabled;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform bool uIsParticle;
+uniform bool uIsEye;
+uniform float uEyeIntensity;
 uniform bool uIsWater;
 uniform float uFoamThreshold;
 uniform float uLightningIntensity;
+uniform bool uIsCthulhu;
+uniform float uCthulhuReveal;
 
 out vec4 fragColor;
 
@@ -102,6 +106,16 @@ vec3 finishSceneColor(vec3 color) {
 }
 
 void main() {
+    if (uIsEye) {
+        vec2 point = gl_PointCoord * 2.0 - 1.0;
+        float radius = length(point);
+        if (radius > 1.0) discard;
+        float core = 1.0 - smoothstep(0.0, 0.25, radius);
+        float halo = pow(1.0 - radius, 2.2);
+        vec3 eyeColor = vec3(1.0, 0.025, 0.002) * (core * 2.8 + halo * 1.35) * uEyeIntensity;
+        fragColor = vec4(eyeColor, clamp(core + halo * 0.72, 0.0, 1.0));
+        return;
+    }
     if (uIsParticle) {
         vec2 point = gl_PointCoord * 2.0 - 1.0;
         float radius = dot(point, point);
@@ -139,6 +153,11 @@ void main() {
         vec3 diffuse = baseColor * light * 0.7 * rough;
         vec3 color = ambient + diffuse;
         color += calculateTorchLight(baseColor, metal);
+        if (uIsCthulhu) {
+            float silhouette = mix(0.025, 1.0, smoothstep(0.0, 1.0, uCthulhuReveal));
+            color *= silhouette;
+            color += baseColor * uLightningIntensity * (0.25 + uCthulhuReveal * 0.7);
+        }
         if (uIsCompass && uCompassHovered) {
             color = mix(color, vec3(1.0, 0.9, 0.5), 0.7);
         }

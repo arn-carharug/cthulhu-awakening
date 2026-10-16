@@ -18,5 +18,13 @@
         return new Float32Array(vertices);
     }
 
-    global.EnvironmentEffects = { createDustField };
+    function createEyePoints() {
+        const vertices = [];
+        const ember = [1.0, 0.055, 0.012];
+        pushVertex(vertices, [-0.34, 1.55, 1.39], [0, 0, 1], ember, [0, 0]);
+        pushVertex(vertices, [0.34, 1.55, 1.39], [0, 0, 1], ember, [1, 0]);
+        return new Float32Array(vertices);
+    }
+
+    global.EnvironmentEffects = { createDustField, createEyePoints };
 }(window));

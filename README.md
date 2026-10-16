@@ -79,6 +79,8 @@ assets/textures/           Textures used by the active scene
 - The ocean uses multi-directional vertex waves, dynamic normals, foam, and Fresnel reflections.
 - Boat and camera motion are synchronized with the active wave field.
 - Lightning flashes intensify during the awakening and affect both objects and sky color.
+- Ritual IV stages the awakening through an erratic compass, rising seas, restrained camera tremors, scripted lightning, a shadow-first Cthulhu reveal, and emissive eyes.
+- The final reveal briefly destabilizes the lantern and exposes the creature during a forced storm flash.
 - Load failures stop startup with a visible error.
 
 ## Deployment

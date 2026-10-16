@@ -13,9 +13,14 @@ const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
     },
     cues: [
         { at: 0.1, name: 'awakening:rumble' },
-        { at: 3.0, name: 'awakening:pillars' },
+        { at: 2.0, name: 'awakening:compass' },
+        { at: 5.0, name: 'awakening:surge' },
+        { at: 7.0, name: 'awakening:pillars' },
         { at: 14.0, name: 'awakening:presence' },
-        { at: 28.0, name: 'awakening:reveal' }
+        { at: 19.0, name: 'awakening:silhouette' },
+        { at: 24.0, name: 'awakening:flash' },
+        { at: 29.0, name: 'awakening:eyes' },
+        { at: 36.0, name: 'awakening:reveal' }
     ]
 });
 
@@ -90,7 +95,23 @@ const STATE = {
     elapsedTime: 0,
     boatMotion: { bob: 0, roll: 0, pitch: 0 },
     lightning: new window.WeatherSystem.LightningSystem(),
+    cinematic: { compassSpin: false, surge: false, eyes: false, shake: 0, torchShock: 0 },
 };
+
+sceneEvents.on('awakening:rumble', () => { STATE.cinematic.shake = 0.18; });
+sceneEvents.on('awakening:compass', () => { STATE.cinematic.compassSpin = true; });
+sceneEvents.on('awakening:surge', () => { STATE.cinematic.surge = true; });
+sceneEvents.on('awakening:presence', () => { STATE.cinematic.shake = 0.34; });
+sceneEvents.on('awakening:flash', () => {
+    STATE.lightning.strike(1.7);
+    STATE.cinematic.shake = 0.5;
+});
+sceneEvents.on('awakening:eyes', () => { STATE.cinematic.eyes = true; });
+sceneEvents.on('awakening:reveal', () => {
+    STATE.lightning.strike(2.15);
+    STATE.cinematic.shake = 0.72;
+    STATE.cinematic.torchShock = 1;
+});
 // Add right after STATE:
 let pillarsRiseY = 0;
 // Water Plane (2D Quad) - Position, Normal, Color, UV
@@ -174,6 +195,12 @@ function getCameraPosition() {
     const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
     cameraPosition[1] += 1.2 + STATE.boatMotion.bob * 0.62;
     cameraPosition[2] += 0.3;
+    if (STATE.cinematic.shake > 0.001) {
+        const shake = STATE.cinematic.shake;
+        cameraPosition[0] += Math.sin(STATE.elapsedTime * 31.0) * shake * 0.09;
+        cameraPosition[1] += Math.sin(STATE.elapsedTime * 43.0 + 0.7) * shake * 0.055;
+        cameraPosition[2] += Math.cos(STATE.elapsedTime * 37.0) * shake * 0.045;
+    }
     return cameraPosition;
 }
 
@@ -476,11 +503,15 @@ async function main() {
     STATE.uResolutionLoc = STATE.gl.getUniformLocation(STATE.program, "uResolution");
     STATE.uTimeLoc = STATE.gl.getUniformLocation(STATE.program, "uTime");
     STATE.uIsParticleLoc = STATE.gl.getUniformLocation(STATE.program, "uIsParticle");
+    STATE.uIsEyeLoc = STATE.gl.getUniformLocation(STATE.program, "uIsEye");
+    STATE.uEyeIntensityLoc = STATE.gl.getUniformLocation(STATE.program, "uEyeIntensity");
     STATE.uIsWaterLoc = STATE.gl.getUniformLocation(STATE.program, "uIsWater");
     STATE.uWaveHeightLoc = STATE.gl.getUniformLocation(STATE.program, "uWaveHeight");
     STATE.uWaveSpeedLoc = STATE.gl.getUniformLocation(STATE.program, "uWaveSpeed");
     STATE.uFoamThresholdLoc = STATE.gl.getUniformLocation(STATE.program, "uFoamThreshold");
     STATE.uLightningIntensityLoc = STATE.gl.getUniformLocation(STATE.program, "uLightningIntensity");
+    STATE.uIsCthulhuLoc = STATE.gl.getUniformLocation(STATE.program, "uIsCthulhu");
+    STATE.uCthulhuRevealLoc = STATE.gl.getUniformLocation(STATE.program, "uCthulhuReveal");
 
     document.getElementById("loading-status").textContent = "Loading models and textures in parallel";
     const [
@@ -711,6 +742,10 @@ async function main() {
     STATE.waterEBO = waterEBO;
     STATE.waterIndexCount = waterMesh.indices.length;
     rebuildAtmosphere(qualityPresets[STATE.quality].particles);
+    const eyes = createEffectsVAO(window.EnvironmentEffects.createEyePoints());
+    STATE.eyeVAO = eyes.vao;
+    STATE.eyeVBO = eyes.buffer;
+    STATE.eyeCount = eyes.count;
 
     // Canvas eventleri vs. aynı kalacak...
     STATE.canvas.addEventListener("click", (event) => {
@@ -867,6 +902,7 @@ function resetScene() {
     STATE.elapsedTime = 0;
     STATE.boatMotion = { bob: 0, roll: 0, pitch: 0 };
     STATE.lightning.reset();
+    STATE.cinematic = { compassSpin: false, surge: false, eyes: false, shake: 0, torchShock: 0 };
     STATE.awakeningTimeline.reset();
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
@@ -972,6 +1008,8 @@ function drawScene(timestamp) {
     STATE.lastFrameTime = timestamp;
     STATE.elapsedTime += deltaSeconds;
     STATE.performanceMonitor?.update(deltaSeconds);
+    STATE.cinematic.shake = Math.max(0, STATE.cinematic.shake - deltaSeconds * 0.22);
+    STATE.cinematic.torchShock = Math.max(0, STATE.cinematic.torchShock - deltaSeconds * 0.38);
     if (STATE.effects.animation) STATE.awakeningTimeline.update(deltaSeconds);
     if (STATE.effects.lightning) {
         const struck = STATE.lightning.update(deltaSeconds, STATE.awakeningStarted);
@@ -1015,8 +1053,15 @@ function drawScene(timestamp) {
     gl.uniform3fv(STATE.uFogColorLoc, STATE.awakeningStarted ? [0.018, 0.035, 0.046] : [0.028, 0.055, 0.07]);
     gl.uniform1i(STATE.uPostEnabledLoc, STATE.effects.post ? 1 : 0);
     gl.uniform1i(STATE.uIsParticleLoc, 0);
+    gl.uniform1i(STATE.uIsEyeLoc, 0);
+    gl.uniform1f(STATE.uEyeIntensityLoc, 0);
+    gl.uniform1i(STATE.uIsCthulhuLoc, 0);
+    gl.uniform1f(STATE.uCthulhuRevealLoc, 0);
     gl.uniform1i(STATE.uIsWaterLoc, 0);
-    gl.uniform1f(STATE.uWaveHeightLoc, STATE.effects.water ? oceanConfig.waveHeight : 0);
+    const surgeProgress = STATE.cinematic.surge
+        ? Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 5) / 12))
+        : 0;
+    gl.uniform1f(STATE.uWaveHeightLoc, STATE.effects.water ? oceanConfig.waveHeight * (1 + surgeProgress * 1.05) : 0);
     gl.uniform1f(STATE.uWaveSpeedLoc, oceanConfig.waveSpeed);
     gl.uniform1f(STATE.uFoamThresholdLoc, oceanConfig.foamThreshold);
     const lightningIntensity = STATE.effects.lightning ? STATE.lightning.intensity : 0;
@@ -1077,7 +1122,8 @@ function drawScene(timestamp) {
     gl.uniform3fv(STATE.uTorchLightPosLoc, torchLightWorldPos);
     const torchFlicker = 0.965
         + Math.sin(STATE.elapsedTime * 17.3) * 0.018
-        + Math.sin(STATE.elapsedTime * 31.7) * 0.012;
+        + Math.sin(STATE.elapsedTime * 31.7) * 0.012
+        + STATE.cinematic.torchShock * Math.sin(STATE.elapsedTime * 74.0) * 0.24;
     gl.uniform1f(
         STATE.uTorchLightIntensityLoc,
         STATE.torchLit && STATE.effects.lighting ? STATE.torchLightIntensity * torchFlicker : 0.0
@@ -1112,6 +1158,11 @@ function drawScene(timestamp) {
         const compassMatrix = STATE.mat4.create();
         STATE.mat4.identity(compassMatrix);
         STATE.mat4.translate(compassMatrix, compassMatrix, getCompassPosition());
+        if (STATE.cinematic.compassSpin) {
+            const spinAge = Math.max(0, STATE.awakeningTimeline.elapsed - 2);
+            STATE.mat4.rotateY(compassMatrix, compassMatrix, spinAge * (2.8 + Math.min(spinAge, 8) * 0.16));
+            STATE.mat4.rotateZ(compassMatrix, compassMatrix, Math.sin(spinAge * 4.5) * 0.08);
+        }
         STATE.mat4.scale(compassMatrix, compassMatrix, [0.1, 0.1, 0.1]);
 
         gl.bindVertexArray(STATE.compassVAO);
@@ -1244,7 +1295,31 @@ function drawScene(timestamp) {
 
     gl.bindVertexArray(STATE.cthulhuVAO);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, cthulhuMatrix);
+    const silhouetteProgress = Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 19) / 17));
+    const revealProgress = Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 36) / 6));
+    gl.uniform1i(STATE.uIsCthulhuLoc, 1);
+    gl.uniform1f(STATE.uCthulhuRevealLoc, Math.max(silhouetteProgress * 0.34, revealProgress));
     gl.drawElements(gl.TRIANGLES, STATE.cthulhuIndexCount, STATE.cthulhuIndexType, 0);
+    gl.uniform1i(STATE.uIsCthulhuLoc, 0);
+
+    // The eyes appear before the full reveal, anchoring the creature in the darkness.
+    if (STATE.cinematic.eyes && STATE.eyeVAO) {
+        const eyeAge = Math.max(0, STATE.awakeningTimeline.elapsed - 29);
+        const eyeIntensity = Math.min(1, eyeAge / 2.5)
+            * (0.78 + Math.sin(STATE.elapsedTime * 5.2) * 0.16 + lightningIntensity * 0.35);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        gl.depthMask(false);
+        gl.uniform1i(STATE.uUseTextureLoc, 0);
+        gl.uniform1i(STATE.uIsEyeLoc, 1);
+        gl.uniform1f(STATE.uEyeIntensityLoc, eyeIntensity);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, cthulhuMatrix);
+        gl.bindVertexArray(STATE.eyeVAO);
+        gl.drawArrays(gl.POINTS, 0, STATE.eyeCount);
+        gl.uniform1i(STATE.uIsEyeLoc, 0);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+    }
 
     // === DUST / MOISTURE PARTICLES ===
     if (STATE.effects.particles) {
