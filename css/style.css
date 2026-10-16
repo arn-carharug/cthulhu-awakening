@@ -9,3 +9,103 @@ canvas {
     width: 100vw;
     height: 100vh;
 }
+
+#controls-guide-toggle {
+    border: 0;
+    padding: 0;
+}
+
+#loading-screen,
+#fatal-error {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    display: grid;
+    place-content: center;
+    gap: 0.75rem;
+    padding: 2rem;
+    text-align: center;
+    color: #e8dfc4;
+    background: radial-gradient(circle at center, #13202b, #03060b 70%);
+    font-family: "Segoe UI", sans-serif;
+}
+
+.loading-title {
+    color: #ffe684;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    letter-spacing: 0.08em;
+}
+
+#fatal-error {
+    color: #ffd9d9;
+    background: #120608;
+    white-space: pre-line;
+}
+
+#fatal-error[hidden],
+#loading-screen[hidden] {
+    display: none;
+}
+
+#debug-panel {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 15000;
+    width: 260px;
+    padding: 14px;
+    border: 1px solid #8bb9c744;
+    border-radius: 10px;
+    color: #d8e5e7;
+    background: #091116ed;
+    box-shadow: 0 8px 30px #000a;
+    font: 13px/1.4 "Segoe UI", sans-serif;
+}
+
+#debug-panel[hidden] {
+    display: none;
+}
+
+#debug-panel header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+    color: #ffe684;
+    font-weight: 600;
+}
+
+#performance-stats {
+    color: #89d6c7;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+#debug-panel label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 0;
+}
+
+#debug-panel select,
+#debug-panel button {
+    border: 1px solid #6d8f994d;
+    border-radius: 5px;
+    padding: 5px 8px;
+    color: #e8f1f2;
+    background: #15252b;
+}
+
+.debug-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+#debug-panel small {
+    display: block;
+    margin-top: 9px;
+    color: #789197;
+}

@@ -20,22 +20,46 @@ uniform vec3 uTorchDirection;
 
 uniform sampler2D uTexture;
 uniform bool uUseTexture;
+uniform bool uUsePBR;
 uniform sampler2D uAOTex;
 uniform sampler2D uMetallicTex;
 uniform sampler2D uRoughnessTex;
-uniform sampler2D uTorchMetallicTex;
 
 out vec4 fragColor;
+
+vec3 calculateTorchLight(vec3 baseColor, float metallic) {
+    if (!uTorchLit) return vec3(0.0);
+
+    vec3 fromLight = vFragPos - uTorchLightPos;
+    float distanceToLight = length(fromLight);
+    vec3 beamDirection = normalize(uTorchDirection);
+    vec3 lightToFragment = normalize(fromLight);
+    vec3 fragmentToLight = -lightToFragment;
+
+    // A flashlight cone with a bright core and a soft outer edge.
+    float coneAlignment = dot(lightToFragment, beamDirection);
+    float outerCone = smoothstep(0.72, 0.84, coneAlignment);
+    float innerCone = smoothstep(0.90, 0.975, coneAlignment);
+    float cone = outerCone * mix(0.62, 1.0, innerCone);
+
+    // Tuned for the large world-space scale used by this scene.
+    float attenuation = 1.0 / (1.0 + 0.018 * distanceToLight + 0.0012 * distanceToLight * distanceToLight);
+    float diffuse = max(dot(normalize(vNormal), fragmentToLight), 0.0);
+
+    // The small fill term suggests bounced light and keeps the beam readable on water.
+    float surfaceLight = diffuse * 1.35 + 0.16;
+    vec3 warmCore = mix(uTorchLightColor, vec3(1.0, 0.9, 0.68), innerCone * 0.45);
+    return warmCore * baseColor * surfaceLight * attenuation * cone
+        * uTorchLightIntensity * (1.0 + metallic * 0.35);
+}
 
 void main() {
     vec3 baseColor = vColor;
     if (uUseTexture) {
         baseColor = texture(uTexture, vTexCoord).rgb;
-        vec3 ao = texture(uAOTex, vTexCoord).rgb;
-        float metallic = uIsTorch
-    ? texture(uTorchMetallicTex, vTexCoord).r
-    : texture(uMetallicTex, vTexCoord).r;
-        float roughness = texture(uRoughnessTex, vTexCoord).r;        
+        vec3 ao = uUsePBR ? texture(uAOTex, vTexCoord).rgb : vec3(1.0);
+        float metallic = uUsePBR ? texture(uMetallicTex, vTexCoord).r : 0.0;
+        float roughness = uUsePBR ? texture(uRoughnessTex, vTexCoord).r : 0.35;
         baseColor *= ao;
         float rough = 1.0 - roughness;
         float metal = metallic;
@@ -43,16 +67,7 @@ void main() {
         vec3 ambient = uAmbientLight * baseColor * 0.4;
         vec3 diffuse = baseColor * light * 0.7 * rough;
         vec3 color = ambient + diffuse;
-        if (uTorchLit) {
-            vec3 lightDir = normalize(uTorchLightPos - vFragPos);
-            float diff = max(dot(vNormal, lightDir), 0.0);
-            float dist = length(uTorchLightPos - vFragPos);
-            float attenuation = 1.0 / (1.0 + 0.15 * dist + 0.02 * dist * dist);
-            float spotEffect = max(dot(lightDir, -normalize(uTorchDirection)), 0.0);
-            spotEffect = pow(spotEffect, 8.0);
-            vec3 torch = uTorchLightColor * baseColor * diff * attenuation * uTorchLightIntensity * spotEffect * (1.0 + metal);
-            color += torch;
-        }
+        color += calculateTorchLight(baseColor, metal);
         if (uIsCompass && uCompassHovered) {
             color = mix(color, vec3(1.0, 0.9, 0.5), 0.7);
         }
@@ -66,16 +81,7 @@ void main() {
     vec3 ambient = uAmbientLight * baseColor * 0.4;
     vec3 diffuse = baseColor * light * 0.7;
     vec3 color = ambient + diffuse;
-    if (uTorchLit) {
-        vec3 lightDir = normalize(uTorchLightPos - vFragPos);
-        float diff = max(dot(vNormal, lightDir), 0.0);
-        float dist = length(uTorchLightPos - vFragPos);
-        float attenuation = 1.0 / (1.0 + 0.15 * dist + 0.02 * dist * dist);
-        float spotEffect = max(dot(lightDir, -normalize(uTorchDirection)), 0.0);
-        spotEffect = pow(spotEffect, 8.0);
-        vec3 torch = uTorchLightColor * baseColor * diff * attenuation * uTorchLightIntensity * spotEffect * 2.0;
-        color += torch;
-    }
+    color += calculateTorchLight(baseColor, 0.0);
     if (uIsCompass && uCompassHovered) {
         color = mix(color, vec3(1.0, 0.9, 0.5), 0.7);
     }

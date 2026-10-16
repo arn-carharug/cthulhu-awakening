@@ -9,7 +9,6 @@ Ke 0 0 0
 Ni 1.45
 d 1
 illum 2
-bump ../textures/germany010b.jpg
 map_Kd ../textures/germany010.jpg
 
 newmtl mat1

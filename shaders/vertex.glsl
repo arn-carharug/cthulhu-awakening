@@ -23,8 +23,8 @@ void main() {
     vec4 worldPosition = uModel * vec4(aPosition, 1.0);
     vFragPos = worldPosition.xyz;
 
-    // Normal (model matrisinin üst sol 3x3'ü)
-    vNormal = mat3(uModel) * aNormal;
+    // Inverse-transpose keeps normals correct under non-uniform scaling.
+    vNormal = transpose(inverse(mat3(uModel))) * aNormal;
 
     // Vertex color (obj/mtl yoksa [1,1,1] gelir)
     vColor = aColor;

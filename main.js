@@ -1,96 +1,20 @@
-// =====================
-// OBJ + MTL Loader
-// =====================
-async function loadText(url) {
-    const res = await fetch(url);
-    return await res.text();
-}
-
-// Simple MTL parser (only reads Kd - diffuse color)
-function parseMTL(mtlText) {
-    const materials = {};
-    let curMat = null;
-    mtlText.split('\n').forEach(line => {
-        line = line.trim();
-        if (line.startsWith('newmtl ')) {
-            curMat = line.split(' ')[1];
-            materials[curMat] = { Kd: [0.8, 0.8, 0.8], map_Kd: null };
-        } else if (line.startsWith('Kd ') && curMat) {
-            const [, r, g, b] = line.split(/\s+/);
-            materials[curMat].Kd = [parseFloat(r), parseFloat(g), parseFloat(b)];
-        } else if (line.startsWith('map_Kd ') && curMat) {
-            materials[curMat].map_Kd = line.split(' ')[1];
-        }
-    });
-    return materials;
-}
-
-// OBJ loader: position, normal, material color
-async function loadOBJWithMTL(objUrl, mtlUrl, useUV = true) {
-    const objText = await loadText(objUrl);
-    const mtlText = mtlUrl ? await loadText(mtlUrl) : '';
-    const materials = parseMTL(mtlText);
-
-    const positions = [], normals = [], uvs = [];
-    let curMaterial = null;
-    const uniqueVerts = {};
-    let vertices = [];
-    let finalIndices = [];
-    let materialForFace = []; // Material index per face
-    let materialList = [];    // Ordered material names
-
-    objText.split('\n').forEach(line => {
-        line = line.trim();
-        if (line.startsWith('v ')) {
-            const [, x, y, z] = line.split(/\s+/);
-            positions.push([parseFloat(x), parseFloat(y), parseFloat(z)]);
-        } else if (line.startsWith('vn ')) {
-            const [, x, y, z] = line.split(/\s+/);
-            normals.push([parseFloat(x), parseFloat(y), parseFloat(z)]);
-        } else if (line.startsWith('vt ')) {
-            const [, u, v] = line.split(/\s+/);
-            uvs.push([parseFloat(u), parseFloat(v)]);
-        } else if (line.startsWith('usemtl ')) {
-            curMaterial = line.split(' ')[1];
-            if (!materialList.includes(curMaterial)) materialList.push(curMaterial);
-        } else if (line.startsWith('f ')) {
-            const verts = line.substr(2).trim().split(/\s+/);
-            for (let i = 1; i < verts.length - 1; ++i) {
-                const face = [0, i, i + 1];
-                for (let j = 0; j < 3; ++j) {
-                    const tokens = verts[face[j]].split('/');
-                    const vi = parseInt(tokens[0]) || 1;
-                    const vti = tokens[1] ? parseInt(tokens[1]) : 1;
-                    const vni = tokens[2] ? parseInt(tokens[2]) : 1;
-                    const key = `${vi}/${vti}/${vni}/${curMaterial}`;
-                    if (uniqueVerts[key] === undefined) {
-                        const pos = positions[vi - 1];
-                        const nor = normals[vni - 1] || [0, 1, 0];
-                        const col = (materials[curMaterial] || { Kd: [0.7, 0.7, 0.7] }).Kd;
-                        if (useUV) {
-                            const uv = uvs[vti - 1] || [0, 0];
-                            vertices.push(...pos, ...nor, ...col, ...uv); // 11 floats
-                            uniqueVerts[key] = (vertices.length / 11) - 1;
-                        } else {
-                            vertices.push(...pos, ...nor, ...col); // 9 floats
-                            uniqueVerts[key] = (vertices.length / 9) - 1;
-                        }
-                    }
-                    finalIndices.push(uniqueVerts[key]);
-                    materialForFace.push(curMaterial); // Material per face
-                }
-            }
-        }
-    });
-
-    return {
-        vertices: new Float32Array(vertices),
-        indices: new Uint16Array(finalIndices),
-        materials,
-        materialForFace,
-        materialList
-    };
-}
+const { loadOBJWithMTL, loadTexture, loadShaderSource, compileShader, createProgram, makeIndexArray } = window.AssetLoader;
+const { defaultQuality, qualityPresets, camera: cameraConfig, awakening: awakeningConfig, torch: torchConfig } = window.GameConfig;
+const sceneEvents = new window.SceneRuntime.EventBus();
+const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
+    duration: awakeningConfig.duration,
+    events: sceneEvents,
+    tracks: {
+        pillars: { ...awakeningConfig.pillars, to: awakeningConfig.pillars.distance },
+        cthulhu: { ...awakeningConfig.cthulhu, to: awakeningConfig.cthulhu.distance }
+    },
+    cues: [
+        { at: 0.1, name: 'awakening:rumble' },
+        { at: 3.0, name: 'awakening:pillars' },
+        { at: 14.0, name: 'awakening:presence' },
+        { at: 28.0, name: 'awakening:reveal' }
+    ]
+});
 
 
 // ===============
@@ -110,8 +34,6 @@ const STATE = {
     cameraSpeed: 0.3,
     yaw: -90,
     pitch: 0,
-    lastX: window.innerWidth / 2,
-    lastY: window.innerHeight / 2,
     firstMouse: true,
     sensitivity: 0.1,
     ambientLight: glMatrix.vec3.fromValues(1.0, 1.0, 1.0),
@@ -121,11 +43,9 @@ const STATE = {
     torchClicked: false,
     torchHovered: false,
     torchLightIntensity: 0.0,
-    maxTorchLight: 1.0,
+    maxTorchLight: torchConfig.automaticIntensity,
     awakeningStarted: false,
-    maxRiseY: 80.0,
-    riseSpeed: 0.01,
-    rlyehCenter: glMatrix.vec3.fromValues(-3, 0, -2),
+    maxRiseY: awakeningConfig.cthulhu.distance,
     uModelLoc: null,
     uViewLoc: null,
     uProjectionLoc: null,
@@ -137,18 +57,14 @@ const STATE = {
     uTorchLightIntensityLoc: null,
     uTorchHoveredLoc: null,
     program: null,
-    torchYaw: 0,
-    torchPitch: 0,
     torchControlMode: false,
-    minAmbient: 0.01,
-    minTorch: 0.1,
-    maxTorch: 2.0,
+    minTorch: 1.0,
+    maxTorch: torchConfig.manualMax,
     uTorchLightColorLoc: null,
     uTorchDirectionLoc: null,
     compassInspectMode: false,
     compassYaw: 0,     // Yaw (left/right)
     compassPitch: 0,   // Pitch (up/down)
-    compassRestoreMatrix: null, // Previous matrix (if needed)
     compassHovered: false,
     uCompassHoveredLoc: null,
     uIsCompassLoc: null,
@@ -159,26 +75,17 @@ const STATE = {
     waterTexture: null,
     waterVAO: null,
     waterIndexCount: 0,
+    lastFrameTime: 0,
+    quality: defaultQuality,
+    effects: { lighting: true, pbr: true, animation: true },
+    awakeningTimeline,
+    performanceMonitor: null,
 };
 // Add right after STATE:
 let pillarsRiseY = 0;
 // Water Plane (2D Quad) - Position, Normal, Color, UV
-const WATER_SIZE = 60000;
-const HALF = WATER_SIZE / 2;
-const waterVertices = new Float32Array([
-    -HALF, 0, -HALF, 0, 1, 0, 1, 1, 1, 0, 0,   // Back-left
-    HALF, 0, -HALF, 0, 1, 0, 1, 1, 1, 1, 0,   // Back-right
-    HALF, 0, HALF, 0, 1, 0, 1, 1, 1, 1, 1,   // Front-right
-    -HALF, 0, HALF, 0, 1, 0, 1, 1, 1, 0, 1    // Front-left
-]);
-const waterIndices = new Uint16Array([
-    0, 1, 2, 0, 2, 3
-]);
-
-
 //-------------------------------------------------------------------------------------------------------//
-const pillarsMaxRiseY = 25.0; // Max rise distance (editable)
-const pillarsRiseSpeed = 0.05; // Rise speed (per frame)
+const pillarsMaxRiseY = awakeningConfig.pillars.distance;
 const CTHULHU_SCALE = 25;
 let compassInspectedOnce = false;
 
@@ -189,16 +96,6 @@ const pillarPositions = [
     [50, 0, -30]
     // (Adjust spacing and count as needed)
 ];
-
-// Model matrices
-const pillar1Matrix = STATE.mat4.create();
-STATE.mat4.translate(pillar1Matrix, pillar1Matrix, [-3, 0, -2]);
-const pillar2Matrix = STATE.mat4.create();
-STATE.mat4.translate(pillar2Matrix, pillar2Matrix, [2, 0, -4]);
-const cthulhuHeadMatrix = STATE.mat4.create();
-STATE.mat4.translate(cthulhuHeadMatrix, cthulhuHeadMatrix, [0, 1.5, -6]);
-const cthulhuBodyMatrix = STATE.mat4.create();
-STATE.mat4.translate(cthulhuBodyMatrix, cthulhuBodyMatrix, [0, 0, -6]);
 
 function createWaterGrid(cols, rows, size = 1) {
     // cols, rows: number of segments (e.g. 200, 200)
@@ -327,8 +224,8 @@ window.addEventListener("mousemove", (event) => {
     // --- Compass Hover ---
     if (!STATE.compassInspectMode) {
         const rect = STATE.canvas.getBoundingClientRect();
-        const mouseX = ((event.clientX - rect.left) / STATE.canvas.width) * 2 - 1;
-        const mouseY = -((event.clientY - rect.top) / STATE.canvas.height) * 2 + 1;
+        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
         // Camera setup
         const viewMatrix = STATE.mat4.create();
@@ -340,7 +237,7 @@ window.addEventListener("mousemove", (event) => {
         STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
 
         const projectionMatrix = STATE.mat4.create();
-        STATE.mat4.perspective(projectionMatrix, Math.PI / 4, STATE.canvas.width / STATE.canvas.height, 0.1, 300);
+        STATE.mat4.perspective(projectionMatrix, cameraConfig.fov, STATE.canvas.width / STATE.canvas.height, cameraConfig.near, cameraConfig.far);
 
         const ray = getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix);
 
@@ -354,8 +251,8 @@ window.addEventListener("mousemove", (event) => {
     // --- Torch Hover (only if awakening started and torch is off) ---
     if (STATE.awakeningStarted && !STATE.torchLit) {
         const rect = STATE.canvas.getBoundingClientRect();
-        const mouseX = ((event.clientX - rect.left) / STATE.canvas.width) * 2 - 1;
-        const mouseY = -((event.clientY - rect.top) / STATE.canvas.height) * 2 + 1;
+        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
         const viewMatrix = STATE.mat4.create();
         const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
@@ -366,7 +263,7 @@ window.addEventListener("mousemove", (event) => {
         STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
 
         const projectionMatrix = STATE.mat4.create();
-        STATE.mat4.perspective(projectionMatrix, Math.PI / 4, STATE.canvas.width / STATE.canvas.height, 0.1, 500);
+        STATE.mat4.perspective(projectionMatrix, cameraConfig.fov, STATE.canvas.width / STATE.canvas.height, cameraConfig.near, cameraConfig.far);
 
         const ray = getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix);
         const pickPos = [
@@ -384,7 +281,7 @@ window.addEventListener("mousemove", (event) => {
 // 4. MOUSE SCROLL: Adjust torch brightness
 window.addEventListener('wheel', (e) => {
     if (STATE.torchLit && STATE.torchControlMode) {
-        STATE.torchLightIntensity += (e.deltaY < 0 ? 0.05 : -0.05);
+        STATE.torchLightIntensity += (e.deltaY < 0 ? 0.25 : -0.25);
         STATE.torchLightIntensity = Math.max(STATE.minTorch, Math.min(STATE.maxTorch, STATE.torchLightIntensity));
         document.getElementById("torch-brightness").textContent = STATE.torchLightIntensity.toFixed(2);
     }
@@ -426,12 +323,8 @@ window.addEventListener("keydown", (e) => {
     }
 
     if (e.key.toLowerCase() === 'h') {
-        const panel = document.getElementById("help-panel");
-        if (panel.style.display === "none" || panel.style.opacity === "0") {
-            window.showHelpPanel();
-        } else {
-            window.hideHelpPanel();
-        }
+        // The controls guide is owned by index.html's single H-key handler.
+        return;
     }
 
     if (!compassInspectedOnce || STATE.awakeningStarted) return;
@@ -473,21 +366,28 @@ window.addEventListener("keydown", (e) => {
         }
     }
 
-    if (e.key.toLowerCase() === 'r') {
-        if (STATE.awakeningStarted && STATE.cthulhuRiseY >= STATE.maxRiseY) {
-            resetScene();
-        }
-    }
 });
 
 document.addEventListener("pointerlockchange", () => {
     if (document.pointerLockElement !== STATE.canvas) STATE.firstMouse = true;
 });
 
-if (compassInspectedOnce) {
-    window.hideCompassWarning();
-}
-
+window.addEventListener('scene:reset', resetScene);
+window.addEventListener('scene:awaken', startAwakening);
+window.addEventListener('scene:quality', (event) => {
+    const quality = event.detail.quality;
+    if (!qualityPresets[quality]) return;
+    STATE.quality = quality;
+    if (STATE.gl) rebuildWaterMesh(qualityPresets[quality].waterSegments);
+    resizeCanvas(true);
+    sceneEvents.emit('quality:changed', { quality, preset: qualityPresets[quality] });
+});
+window.addEventListener('scene:effect', (event) => {
+    if (event.detail.effect in STATE.effects) {
+        STATE.effects[event.detail.effect] = event.detail.enabled;
+        sceneEvents.emit('effect:changed', event.detail);
+    }
+});
 
 // =====================
 // MAIN
@@ -495,15 +395,17 @@ if (compassInspectedOnce) {
 async function main() {
     STATE.canvas = document.getElementById("glCanvas");
     STATE.gl = STATE.canvas.getContext("webgl2");
-    STATE.canvas.width = window.innerWidth;
-    STATE.canvas.height = window.innerHeight;
+    if (!STATE.gl) throw new Error("WebGL 2 is not supported by this browser or GPU.");
+    resizeCanvas();
     STATE.gl.viewport(0, 0, STATE.canvas.width, STATE.canvas.height);
     STATE.gl.clearColor(0.0, 0.1, 0.2, 1.0);
     STATE.gl.enable(STATE.gl.DEPTH_TEST);
 
     // Shader kaynaklarını yükle
-    const vertexSrc = await loadShaderSource("shaders/vertex.glsl");
-    const fragmentSrc = await loadShaderSource("shaders/fragment.glsl");
+    const [vertexSrc, fragmentSrc] = await Promise.all([
+        loadShaderSource("shaders/vertex.glsl"),
+        loadShaderSource("shaders/fragment.glsl")
+    ]);
     const vertexShader = compileShader(STATE.gl, vertexSrc, STATE.gl.VERTEX_SHADER);
     const fragmentShader = compileShader(STATE.gl, fragmentSrc, STATE.gl.FRAGMENT_SHADER);
     if (!vertexShader || !fragmentShader) return;
@@ -528,10 +430,39 @@ async function main() {
     STATE.uTorchDirectionLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchDirection");
     STATE.uCompassHoveredLoc = STATE.gl.getUniformLocation(STATE.program, "uCompassHovered");
     STATE.uIsCompassLoc = STATE.gl.getUniformLocation(STATE.program, "uIsCompass");
+    STATE.uTextureLoc = STATE.gl.getUniformLocation(STATE.program, "uTexture");
+    STATE.uUseTextureLoc = STATE.gl.getUniformLocation(STATE.program, "uUseTexture");
+    STATE.uUsePBRLoc = STATE.gl.getUniformLocation(STATE.program, "uUsePBR");
+    STATE.uAOTexLoc = STATE.gl.getUniformLocation(STATE.program, "uAOTex");
+    STATE.uMetallicTexLoc = STATE.gl.getUniformLocation(STATE.program, "uMetallicTex");
+    STATE.uRoughnessTexLoc = STATE.gl.getUniformLocation(STATE.program, "uRoughnessTex");
+
+    document.getElementById("loading-status").textContent = "Loading models and textures in parallel";
+    const [
+        shipTexture, botModel, torchModel, compassTexture, compassModel,
+        pillarsTexture, pillarsModel, cthulhuTexture, cthulhuAOTex,
+        cthulhuMetallicTex, cthulhuRoughnessTex, cthulhuModel, waterTexture
+    ] = await Promise.all([
+        loadTexture(STATE.gl, 'assets/textures/WeatheredWood2_S.jpg'),
+        loadOBJWithMTL('assets/models/woodBoat.obj', 'assets/models/woodBoat.mtl', true),
+        loadOBJWithMTL('assets/models/torch.obj', 'assets/models/torch.mtl', false),
+        loadTexture(STATE.gl, 'assets/textures/OC1KI90.jpg'),
+        loadOBJWithMTL('assets/models/compass.obj', 'assets/models/compass.mtl', true),
+        loadTexture(STATE.gl, 'assets/textures/germany010.jpg'),
+        loadOBJWithMTL('assets/models/pillars.obj', 'assets/models/pillars.mtl', true),
+        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Base_Color.png'),
+        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_AO.png'),
+        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Metallic.png'),
+        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Roughness.png'),
+        loadOBJWithMTL('assets/models/Horror_low_subd.obj', null, true),
+        loadTexture(STATE.gl, 'assets/textures/beautiful-photo-sea-waves.jpg')
+    ]);
+    Object.assign(STATE, {
+        shipTexture, compassTexture, pillarsTexture, cthulhuTexture,
+        cthulhuAOTex, cthulhuMetallicTex, cthulhuRoughnessTex, waterTexture
+    });
 
     // 1) BOT (OBJ) MODELİNİ YÜKLE
-    STATE.shipTexture = loadTexture(STATE.gl, 'assets/textures/WeatheredWood2_S.jpg');
-    const botModel = await loadOBJWithMTL('assets/models/woodBoat.obj', 'assets/models/woodBoat.mtl', true);
     const shipVAO = STATE.gl.createVertexArray();
     STATE.gl.bindVertexArray(shipVAO);
 
@@ -559,17 +490,16 @@ async function main() {
 
     STATE.shipVAO = shipVAO;
     STATE.shipIndexCount = botModel.indices.length;
+    STATE.shipIndexType = botModel.indices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
 
     const viewMatrix = STATE.mat4.create();
     const projectionMatrix = STATE.mat4.create();
     STATE.mat4.lookAt(viewMatrix, STATE.vec3.fromValues(0, 2, 8), STATE.vec3.fromValues(0, 0, 0), STATE.vec3.fromValues(0, 1, 0));
-    STATE.mat4.perspective(projectionMatrix, Math.PI / 4, STATE.canvas.width / STATE.canvas.height, 0.1, 300);
+    STATE.mat4.perspective(projectionMatrix, cameraConfig.fov, STATE.canvas.width / STATE.canvas.height, cameraConfig.near, cameraConfig.far);
     STATE.gl.uniformMatrix4fv(STATE.uViewLoc, false, viewMatrix);
     STATE.gl.uniformMatrix4fv(STATE.uProjectionLoc, false, projectionMatrix);
 
     // Torch VAO/VBO/EBO
-    const torchModel = await loadOBJWithMTL('assets/models/torch.obj', 'assets/models/torch.mtl', false);
-    STATE.torchMetallicTex = loadTexture(STATE.gl, 'assets/textures/lantern_Metallic.jpg');
     const torchVAO = STATE.gl.createVertexArray();
     STATE.gl.bindVertexArray(torchVAO);
 
@@ -590,10 +520,9 @@ async function main() {
 
     STATE.torchVAO = torchVAO;
     STATE.torchIndexCount = torchModel.indices.length;
+    STATE.torchIndexType = torchModel.indices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
 
     // PUSULA VAO, BODY/NEEDLE İÇİN AYRI EBO'LAR
-    STATE.compassTexture = loadTexture(STATE.gl, 'assets/textures/OC1KI90.jpg');
-    const compassModel = await loadOBJWithMTL('assets/models/compass.obj', 'assets/models/compass.mtl', false);
 
     // Body/needle indexlerini ayır
     const compassBodyIndices = [];
@@ -614,8 +543,8 @@ async function main() {
             );
         }
     }
-    STATE.compassBodyIndices = new Uint16Array(compassBodyIndices);
-    STATE.compassNeedleIndices = new Uint16Array(compassNeedleIndices);
+    STATE.compassBodyIndices = makeIndexArray(compassBodyIndices);
+    STATE.compassNeedleIndices = makeIndexArray(compassNeedleIndices);
 
     const compassVAO = STATE.gl.createVertexArray();
     STATE.gl.bindVertexArray(compassVAO);
@@ -634,21 +563,23 @@ async function main() {
     STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleIndices, STATE.gl.STATIC_DRAW);
 
     STATE.gl.enableVertexAttribArray(aPositionLoc);
-    STATE.gl.vertexAttribPointer(aPositionLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 0);
+    STATE.gl.vertexAttribPointer(aPositionLoc, 3, STATE.gl.FLOAT, false, 11 * 4, 0);
     STATE.gl.enableVertexAttribArray(aNormalLoc);
-    STATE.gl.vertexAttribPointer(aNormalLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 3 * 4);
+    STATE.gl.vertexAttribPointer(aNormalLoc, 3, STATE.gl.FLOAT, false, 11 * 4, 3 * 4);
     STATE.gl.enableVertexAttribArray(aColorLoc);
-    STATE.gl.vertexAttribPointer(aColorLoc, 3, STATE.gl.FLOAT, false, 9 * 4, 6 * 4);
+    STATE.gl.vertexAttribPointer(aColorLoc, 3, STATE.gl.FLOAT, false, 11 * 4, 6 * 4);
+    STATE.gl.enableVertexAttribArray(aTexCoordLoc);
+    STATE.gl.vertexAttribPointer(aTexCoordLoc, 2, STATE.gl.FLOAT, false, 11 * 4, 9 * 4);
 
     STATE.compassVAO = compassVAO;
     STATE.compassBodyEBO = compassBodyEBO;
     STATE.compassNeedleEBO = compassNeedleEBO;
     STATE.compassBodyIndexCount = STATE.compassBodyIndices.length;
     STATE.compassNeedleIndexCount = STATE.compassNeedleIndices.length;
+    STATE.compassBodyIndexType = STATE.compassBodyIndices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
+    STATE.compassNeedleIndexType = STATE.compassNeedleIndices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
 
     // Diğer modeller...
-    STATE.pillarsTexture = loadTexture(STATE.gl, 'assets/textures/germany010.jpg');
-    const pillarsModel = await loadOBJWithMTL('assets/models/pillars.obj', 'assets/models/pillars.mtl', true);
     const pillarsVAO = STATE.gl.createVertexArray();
     STATE.gl.bindVertexArray(pillarsVAO);
 
@@ -671,16 +602,9 @@ async function main() {
 
     STATE.pillarsVAO = pillarsVAO;
     STATE.pillarsIndexCount = pillarsModel.indices.length;
+    STATE.pillarsIndexType = pillarsModel.indices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
 
     // CTHULHU OBJECT
-    STATE.cthulhuTexture = loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Base_Color.png');
-    // AO (Ambient Occlusion) Texture
-    STATE.cthulhuAOTex = loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_AO.png');
-    // Metallic Texture
-    STATE.cthulhuMetallicTex = loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Metallic.png');
-    // Roughness Texture
-    STATE.cthulhuRoughnessTex = loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Roughness.png');
-    const cthulhuModel = await loadOBJWithMTL('assets/models/Horror_low_subd.obj', null, true);
     const cthulhuVAO = STATE.gl.createVertexArray();
     STATE.gl.bindVertexArray(cthulhuVAO);
 
@@ -707,10 +631,10 @@ async function main() {
 
     STATE.cthulhuVAO = cthulhuVAO;
     STATE.cthulhuIndexCount = cthulhuModel.indices.length;
+    STATE.cthulhuIndexType = cthulhuModel.indices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
 
-    STATE.waterTexture = loadTexture(STATE.gl, 'assets/textures/beautiful-photo-sea-waves.jpg');
-    // 1. Su gridini oluştur (örnek: 200x200 grid, kare başına 2 birim)
-    const waterMesh = createWaterGrid(200, 200, 2);
+    const waterSegments = qualityPresets[STATE.quality].waterSegments;
+    const waterMesh = createWaterGrid(waterSegments, waterSegments, 400 / waterSegments);
 
     // 2. VAO/VBO/EBO oluştur ve ata
     const waterVAO = STATE.gl.createVertexArray();
@@ -738,6 +662,8 @@ async function main() {
 
     // 4. STATE'e kaydet
     STATE.waterVAO = waterVAO;
+    STATE.waterVBO = waterVBO;
+    STATE.waterEBO = waterEBO;
     STATE.waterIndexCount = waterMesh.indices.length;
 
     // Canvas eventleri vs. aynı kalacak...
@@ -747,8 +673,8 @@ async function main() {
         // 1. Önce compass'a tıklama kontrolü (ve return!)
         if (!STATE.compassInspectMode) {
             const rect = STATE.canvas.getBoundingClientRect();
-            const mouseX = ((event.clientX - rect.left) / STATE.canvas.width) * 2 - 1;
-            const mouseY = -((event.clientY - rect.top) / STATE.canvas.height) * 2 + 1;
+            const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
             // Kamera bilgisi
             const viewMatrix = STATE.mat4.create();
@@ -760,7 +686,7 @@ async function main() {
             STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
 
             const projectionMatrix = STATE.mat4.create();
-            STATE.mat4.perspective(projectionMatrix, Math.PI / 4, STATE.canvas.width / STATE.canvas.height, 0.1, 300);
+            STATE.mat4.perspective(projectionMatrix, cameraConfig.fov, STATE.canvas.width / STATE.canvas.height, cameraConfig.near, cameraConfig.far);
 
             const ray = getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix);
 
@@ -781,6 +707,7 @@ async function main() {
             if (rayIntersectsSphere(ray.origin, ray.direction, torchPos, 0.3)) {
                 STATE.torchClicked = true;
                 STATE.torchLit = true;
+                STATE.torchLightIntensity = torchConfig.defaultIntensity;
                 return;
             }
         }
@@ -788,29 +715,10 @@ async function main() {
 
 
 
-    drawScene();
+    STATE.performanceMonitor = new window.PerformanceMonitor(document.getElementById("performance-stats"));
+    document.getElementById("loading-screen").hidden = true;
+    drawScene(performance.now());
 }
-//--------------------------------------------------------------------------------------------------------------------------------
-// Yardım panelini göster/gizle fonksiyonları (global)
-window.hideHelpPanel = function () {
-    const panel = document.getElementById("help-panel");
-    if (panel) {
-        panel.style.opacity = "0";
-        panel.style.pointerEvents = "none";
-        setTimeout(() => { panel.style.display = "none"; }, 250);
-    }
-};
-window.showHelpPanel = function () {
-    const panel = document.getElementById("help-panel");
-    if (panel) {
-        panel.style.display = "block";
-        setTimeout(() => {
-            panel.style.opacity = "1";
-            panel.style.pointerEvents = "auto";
-        }, 10);
-    }
-};
-
 function getCompassPosition() {
     return [
         STATE.shipPosition[0] - 0.6,
@@ -877,7 +785,7 @@ function isLookingAtRlyeh() {
         STATE.vec3.sub(toPillar, pos, STATE.shipPosition);
         STATE.vec3.normalize(toPillar, toPillar);
 
-        const dot = STATE.vec3.dot(STATE.cameraFront, toPillar);
+        const dot = Math.max(-1, Math.min(1, STATE.vec3.dot(STATE.cameraFront, toPillar)));
         const angle = Math.acos(dot) * 180 / Math.PI; // derece cinsinden
 
         const distance = STATE.vec3.distance(STATE.shipPosition, pos);
@@ -899,30 +807,72 @@ function resetScene() {
     pillarsRiseY = 0;
     STATE.torchHovered = false;
     STATE.torchLightIntensity = 0.0;
+    STATE.torchControlMode = false;
     STATE.compassInspectMode = false;
     compassInspectedOnce = false;
     STATE.yaw = -90;
     STATE.pitch = 0;
     STATE.firstMouse = true;
+    STATE.cameraFront = glMatrix.vec3.fromValues(0, 0, -1);
+    STATE.cameraUp = glMatrix.vec3.fromValues(0, 1, 0);
+    STATE.lastFrameTime = performance.now();
+    STATE.awakeningTimeline.reset();
+    document.getElementById("torch-mode").textContent = "OFF";
+    document.getElementById("torch-brightness").textContent = "0.00";
+    window.showCompassWarning?.();
 }
 
-function loadTexture(gl, url) {
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([120, 100, 80, 255]));
-    const image = new Image();
-    image.onload = function () {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        gl.generateMipmap(gl.TEXTURE_2D);
-        console.log("Texture loaded: " + url);
-    };
-    image.onerror = function () {
-        console.error("Texture FAILED: " + url);
-    };
-    image.src = url;
-    return texture;
+function startAwakening() {
+    if (STATE.awakeningStarted) return;
+    STATE.awakeningStarted = true;
+    STATE.awakeningTimeline.start();
+    sceneEvents.emit('awakening:started');
 }
+
+function rebuildWaterMesh(segments) {
+    if (!STATE.gl || !STATE.program) return;
+    const gl = STATE.gl;
+    const waterMesh = createWaterGrid(segments, segments, 400 / segments);
+    if (STATE.waterVAO) gl.deleteVertexArray(STATE.waterVAO);
+    if (STATE.waterVBO) gl.deleteBuffer(STATE.waterVBO);
+    if (STATE.waterEBO) gl.deleteBuffer(STATE.waterEBO);
+
+    STATE.waterVAO = gl.createVertexArray();
+    STATE.waterVBO = gl.createBuffer();
+    STATE.waterEBO = gl.createBuffer();
+    gl.bindVertexArray(STATE.waterVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, STATE.waterVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, waterMesh.vertices, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.waterEBO);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, waterMesh.indices, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(STATE.aPositionLoc);
+    gl.vertexAttribPointer(STATE.aPositionLoc, 3, gl.FLOAT, false, 11 * 4, 0);
+    gl.enableVertexAttribArray(STATE.aNormalLoc);
+    gl.vertexAttribPointer(STATE.aNormalLoc, 3, gl.FLOAT, false, 11 * 4, 3 * 4);
+    gl.enableVertexAttribArray(STATE.aColorLoc);
+    gl.vertexAttribPointer(STATE.aColorLoc, 3, gl.FLOAT, false, 11 * 4, 6 * 4);
+    const texCoord = gl.getAttribLocation(STATE.program, 'aTexCoord');
+    gl.enableVertexAttribArray(texCoord);
+    gl.vertexAttribPointer(texCoord, 2, gl.FLOAT, false, 11 * 4, 9 * 4);
+    STATE.waterIndexCount = waterMesh.indices.length;
+}
+
+function resizeCanvas(force = false) {
+    if (!STATE.canvas || !STATE.gl) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, qualityPresets[STATE.quality].dpr);
+    const width = Math.max(1, Math.round(STATE.canvas.clientWidth * dpr));
+    const height = Math.max(1, Math.round(STATE.canvas.clientHeight * dpr));
+    if (!force && STATE.canvas.width === width && STATE.canvas.height === height) return;
+    STATE.canvas.width = width;
+    STATE.canvas.height = height;
+    STATE.gl.viewport(0, 0, width, height);
+    if (STATE.uProjectionLoc) {
+        const projection = STATE.mat4.create();
+        STATE.mat4.perspective(projection, cameraConfig.fov, width / height, cameraConfig.near, cameraConfig.far);
+        STATE.gl.uniformMatrix4fv(STATE.uProjectionLoc, false, projection);
+    }
+}
+
 function getTorchLightWorldPosition() {
     // FPS torch için torchMatrix torch'un FPS pozisyonunda olmalı!
     // Torch modelinin ucunun model-space pozisyonu (genellikle [0, 1, 0, 1])
@@ -932,24 +882,33 @@ function getTorchLightWorldPosition() {
     return [worldTip[0], worldTip[1], worldTip[2]];
 }
 
-function drawScene() {
+function drawScene(timestamp) {
     const gl = STATE.gl;
+    resizeCanvas();
+    const deltaSeconds = Math.min((timestamp - STATE.lastFrameTime) / 1000, 0.1) || 0;
+    STATE.lastFrameTime = timestamp;
+    STATE.performanceMonitor?.update(deltaSeconds);
+    if (STATE.effects.animation) STATE.awakeningTimeline.update(deltaSeconds);
 
     // 1. Ambient ve torch intensity logic
     if (STATE.torchLit && !STATE.torchControlMode) {
-        STATE.ambientLight[0] = Math.min(STATE.ambientLight[0] + 0.01, 0.8);
-        STATE.ambientLight[1] = Math.min(STATE.ambientLight[1] + 0.008, 0.55);
-        STATE.ambientLight[2] = Math.min(STATE.ambientLight[2] + 0.002, 0.25);
+        // Keep the world dark: the torch should be a local beam, not global ambient light.
+        STATE.ambientLight[0] = Math.max(0.025, STATE.ambientLight[0] - 0.8 * deltaSeconds);
+        STATE.ambientLight[1] = Math.max(0.03, STATE.ambientLight[1] - 0.8 * deltaSeconds);
+        STATE.ambientLight[2] = Math.max(0.04, STATE.ambientLight[2] - 0.8 * deltaSeconds);
         if (STATE.torchLightIntensity < STATE.maxTorchLight) {
-            let inc = Math.max(0.003, 0.012 * (STATE.ambientLight[0]));
-            STATE.torchLightIntensity = Math.min(STATE.torchLightIntensity + inc, STATE.maxTorchLight);
+            STATE.torchLightIntensity = Math.min(
+                STATE.torchLightIntensity + 3.0 * deltaSeconds,
+                STATE.maxTorchLight
+            );
         }
     } else if (STATE.torchLit && STATE.torchControlMode) {
     } else if (STATE.awakeningStarted) {
-        STATE.ambientLight[0] = Math.max(STATE.ambientLight[0] - 0.05, 0.0);
-        STATE.ambientLight[1] = Math.max(STATE.ambientLight[1] - 0.01, 0.0);
-        STATE.ambientLight[2] = Math.max(STATE.ambientLight[2] - 0.006, 0.0);
+        STATE.ambientLight[0] = Math.max(STATE.ambientLight[0] - 3.0 * deltaSeconds, 0.0);
+        STATE.ambientLight[1] = Math.max(STATE.ambientLight[1] - 0.6 * deltaSeconds, 0.0);
+        STATE.ambientLight[2] = Math.max(STATE.ambientLight[2] - 0.36 * deltaSeconds, 0.0);
     }
+    document.getElementById("torch-brightness").textContent = STATE.torchLightIntensity.toFixed(2);
 
     // 2. View ve kamera ayarı
     let cameraPosition = STATE.vec3.clone(STATE.shipPosition);
@@ -981,13 +940,13 @@ function drawScene() {
     // === WATER DRAW ===
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, STATE.waterTexture);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uTexture"), 4);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 1);
+    gl.uniform1i(STATE.uTextureLoc, 4);
+    gl.uniform1i(STATE.uUseTextureLoc, 1);
+    gl.uniform1i(STATE.uUsePBRLoc, 0);
 
     gl.bindVertexArray(STATE.waterVAO);
 
     const waterModelMatrix = STATE.mat4.create();
-    const waterY = STATE.shipPosition[1] - 0.8;
     STATE.mat4.translate(
         waterModelMatrix,
         waterModelMatrix,
@@ -1000,27 +959,28 @@ function drawScene() {
     gl.uniformMatrix4fv(STATE.uModelLoc, false, waterModelMatrix);
     gl.drawElements(gl.TRIANGLES, STATE.waterIndexCount, gl.UNSIGNED_INT, 0);
 
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 0); // Sonra diğer nesneler için kapat
+    gl.uniform1i(STATE.uUseTextureLoc, 0);
 
     // --- Torch ışık pozisyonu ve rengi ---
     const torchLightWorldPos = getTorchLightWorldPosition();
-    gl.uniform1i(STATE.uTorchLitLoc, STATE.torchLit ? 1 : 0);
+    gl.uniform1i(STATE.uTorchLitLoc, STATE.torchLit && STATE.effects.lighting ? 1 : 0);
     gl.uniform3fv(STATE.uAmbientLightLoc, STATE.ambientLight);
     gl.uniform3fv(STATE.uTorchLightPosLoc, torchLightWorldPos);
-    gl.uniform1f(STATE.uTorchLightIntensityLoc, STATE.torchLit ? STATE.torchLightIntensity : 0.0);
+    gl.uniform1f(
+        STATE.uTorchLightIntensityLoc,
+        STATE.torchLit && STATE.effects.lighting ? STATE.torchLightIntensity : 0.0
+    );
     gl.uniform3fv(STATE.uTorchLightColorLoc, [1.0, 0.7, 0.2]);
     gl.uniform3fv(STATE.uTorchDirectionLoc, STATE.cameraFront);
 
     // 5. Awakening: pillar ve cthulhu hareketleri
     if (!STATE.awakeningStarted && isLookingAtRlyeh()) {
-        STATE.awakeningStarted = true;
+        startAwakening();
         console.log("The Awakening Begins!");
     }
-    if (STATE.awakeningStarted && pillarsRiseY < pillarsMaxRiseY) {
-        pillarsRiseY += pillarsRiseSpeed;
-    }
-    if (STATE.awakeningStarted && STATE.cthulhuRiseY < STATE.maxRiseY) {
-        STATE.cthulhuRiseY += 0.04;
+    if (STATE.awakeningStarted) {
+        pillarsRiseY = STATE.awakeningTimeline.value('pillars');
+        STATE.cthulhuRiseY = STATE.awakeningTimeline.value('cthulhu');
     }
 
     // === TORCH ÇİZİMİ ===
@@ -1029,13 +989,9 @@ function drawScene() {
     gl.uniform1i(STATE.uIsCompassLoc, 0);
     gl.uniform1i(STATE.uCompassHoveredLoc, 0);
 
-    gl.activeTexture(gl.TEXTURE8);
-    gl.bindTexture(gl.TEXTURE_2D, STATE.torchMetallicTex);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uTorchMetallicTex"), 9);
-
     gl.bindVertexArray(STATE.torchVAO);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, STATE.torchMatrix);
-    gl.drawElements(gl.TRIANGLES, STATE.torchIndexCount, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, STATE.torchIndexCount, STATE.torchIndexType, 0);
 
     gl.uniform1i(STATE.uIsTorchLoc, 0);
 
@@ -1054,15 +1010,16 @@ function drawScene() {
         // Önce gövde (doku aktif)
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, STATE.compassTexture);
-        gl.uniform1i(gl.getUniformLocation(STATE.program, "uTexture"), 2);
-        gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 1);
+        gl.uniform1i(STATE.uTextureLoc, 2);
+        gl.uniform1i(STATE.uUseTextureLoc, 1);
+        gl.uniform1i(STATE.uUsePBRLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassBodyEBO);
-        gl.drawElements(gl.TRIANGLES, STATE.compassBodyIndexCount, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, STATE.compassBodyIndexCount, STATE.compassBodyIndexType, 0);
 
         // Sonra iğne (doku kapalı)
-        gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 0);
+        gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleEBO);
-        gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, STATE.compassNeedleIndexType, 0);
 
         gl.uniform1i(STATE.uIsCompassLoc, 0);
     } else {
@@ -1088,15 +1045,16 @@ function drawScene() {
         // Gövde (doku aktif)
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, STATE.compassTexture);
-        gl.uniform1i(gl.getUniformLocation(STATE.program, "uTexture"), 2);
-        gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 1);
+        gl.uniform1i(STATE.uTextureLoc, 2);
+        gl.uniform1i(STATE.uUseTextureLoc, 1);
+        gl.uniform1i(STATE.uUsePBRLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassBodyEBO);
-        gl.drawElements(gl.TRIANGLES, STATE.compassBodyIndexCount, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, STATE.compassBodyIndexCount, STATE.compassBodyIndexType, 0);
 
         // İğne (doku kapalı)
-        gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 0);
+        gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleEBO);
-        gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, STATE.compassNeedleIndexType, 0);
 
         gl.uniform1i(STATE.uIsCompassLoc, 0);
     }
@@ -1104,22 +1062,24 @@ function drawScene() {
     // === SHIP ÇİZİMİ ===
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, STATE.shipTexture);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uTexture"), 0);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 1);
+    gl.uniform1i(STATE.uTextureLoc, 0);
+    gl.uniform1i(STATE.uUseTextureLoc, 1);
+    gl.uniform1i(STATE.uUsePBRLoc, 0);
     gl.bindVertexArray(STATE.shipVAO);
     const modelMatrix = STATE.mat4.create();
     STATE.mat4.translate(modelMatrix, modelMatrix, STATE.shipPosition);
     STATE.mat4.rotateX(modelMatrix, modelMatrix, Math.PI / 2);
     STATE.mat4.rotateY(modelMatrix, modelMatrix, Math.PI);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
-    gl.drawElements(gl.TRIANGLES, STATE.shipIndexCount, gl.UNSIGNED_SHORT, 0);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 0);
+    gl.drawElements(gl.TRIANGLES, STATE.shipIndexCount, STATE.shipIndexType, 0);
+    gl.uniform1i(STATE.uUseTextureLoc, 0);
 
     // === PILLARS ÇİZİMİ ===
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, STATE.pillarsTexture);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uTexture"), 1);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 1);
+    gl.uniform1i(STATE.uTextureLoc, 1);
+    gl.uniform1i(STATE.uUseTextureLoc, 1);
+    gl.uniform1i(STATE.uUsePBRLoc, 0);
 
     for (let i = 0; i < pillarPositions.length; i++) {
         const base = pillarPositions[i];
@@ -1135,7 +1095,7 @@ function drawScene() {
 
         gl.bindVertexArray(STATE.pillarsVAO);
         gl.uniformMatrix4fv(STATE.uModelLoc, false, pillarsMatrix);
-        gl.drawElements(gl.TRIANGLES, STATE.pillarsIndexCount, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, STATE.pillarsIndexCount, STATE.pillarsIndexType, 0);
     }
 
     // === CTHULHU ÇİZİMİ ===
@@ -1147,76 +1107,32 @@ function drawScene() {
     STATE.mat4.scale(cthulhuMatrix, cthulhuMatrix, [CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE]);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, STATE.cthulhuTexture);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uTexture"), 3); // texture sampler index
+    gl.uniform1i(STATE.uTextureLoc, 3);
     // AO haritası - Texture Unit 5
     STATE.gl.activeTexture(STATE.gl.TEXTURE5);
     STATE.gl.bindTexture(STATE.gl.TEXTURE_2D, STATE.cthulhuAOTex);
-    STATE.gl.uniform1i(STATE.gl.getUniformLocation(STATE.program, "uAOTex"), 5);
+    STATE.gl.uniform1i(STATE.uAOTexLoc, 5);
 
     // Metallic haritası - Texture Unit 6
     STATE.gl.activeTexture(STATE.gl.TEXTURE6);
     STATE.gl.bindTexture(STATE.gl.TEXTURE_2D, STATE.cthulhuMetallicTex);
-    STATE.gl.uniform1i(STATE.gl.getUniformLocation(STATE.program, "uMetallicTex"), 6);
+    STATE.gl.uniform1i(STATE.uMetallicTexLoc, 6);
 
     // Roughness haritası - Texture Unit 7
     STATE.gl.activeTexture(STATE.gl.TEXTURE7);
     STATE.gl.bindTexture(STATE.gl.TEXTURE_2D, STATE.cthulhuRoughnessTex);
-    STATE.gl.uniform1i(STATE.gl.getUniformLocation(STATE.program, "uRoughnessTex"), 7);
-    gl.uniform1i(gl.getUniformLocation(STATE.program, "uUseTexture"), 1); // texture açık
+    STATE.gl.uniform1i(STATE.uRoughnessTexLoc, 7);
+    gl.uniform1i(STATE.uUseTextureLoc, 1);
+    const qualityAllowsPBR = qualityPresets[STATE.quality].usePBR;
+    gl.uniform1i(STATE.uUsePBRLoc, STATE.effects.pbr && qualityAllowsPBR ? 1 : 0);
 
     gl.bindVertexArray(STATE.cthulhuVAO);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, cthulhuMatrix);
-    gl.drawElements(gl.TRIANGLES, STATE.cthulhuIndexCount, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, STATE.cthulhuIndexCount, STATE.cthulhuIndexType, 0);
 
     requestAnimationFrame(drawScene);
 }
 
-function createAndDrawObject(vertices, indices, modelMatrix) {
-    const gl = STATE.gl;
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-    const ebo = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-
-    const aPositionLoc = gl.getAttribLocation(STATE.program, "aPosition");
-    gl.enableVertexAttribArray(aPositionLoc);
-    gl.vertexAttribPointer(aPositionLoc, 3, gl.FLOAT, false, 0, 0);
-
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
-    gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-}
-
-async function loadShaderSource(url) {
-    const response = await fetch(url);
-    return await response.text();
-}
-function compileShader(gl, source, type) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("Shader compile failed:", gl.getShaderInfoLog(shader));
-        return null;
-    }
-    return shader;
-}
-function createProgram(gl, vertexShader, fragmentShader) {
-    const program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error("Program link failed:", gl.getProgramInfoLog(program));
-        return null;
-    }
-    return program;
-}
 function getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix) {
     const invVP = STATE.mat4.create();
     STATE.mat4.multiply(invVP, projectionMatrix, viewMatrix);
@@ -1244,7 +1160,14 @@ function rayIntersectsSphere(rayOrigin, rayDir, sphereCenter, radius) {
     const L = STATE.vec3.create();
     STATE.vec3.sub(L, sphereCenter, rayOrigin);
     const tca = STATE.vec3.dot(L, rayDir);
+    if (tca < 0) return false;
     const d2 = STATE.vec3.dot(L, L) - tca * tca;
     return d2 <= radius * radius;
 }
-main();
+main().catch((error) => {
+    console.error(error);
+    document.getElementById("loading-screen").hidden = true;
+    const panel = document.getElementById("fatal-error");
+    panel.hidden = false;
+    panel.textContent = `The scene could not be started.\n${error.message}`;
+});

@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>The Awakening of Cthulhu</title>
+    <link rel="stylesheet" href="css/style.css">
     <style>
       html, body {
         margin: 0;
@@ -128,17 +130,40 @@
 </head>
 <body>
     <canvas id="glCanvas" tabindex="1"></canvas>
+    <div id="loading-screen" role="status" aria-live="polite">
+      <div class="loading-title">The sea is stirring…</div>
+      <div id="loading-status">Loading shaders and artifacts</div>
+    </div>
+    <div id="fatal-error" role="alert" hidden></div>
     <div id="torch-ui">
       Torch Control: <span id="torch-mode">OFF</span><br>
-      Brightness: <span id="torch-brightness">1.0</span>
+      Brightness: <span id="torch-brightness">0.00</span>
     </div>
+    <aside id="debug-panel" hidden aria-label="Scene debug controls">
+      <header>Scene diagnostics <span id="performance-stats">-- FPS · -- ms</span></header>
+      <label>Quality
+        <select id="debug-quality">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </label>
+      <label><input type="checkbox" data-effect="lighting" checked> Torch lighting</label>
+      <label><input type="checkbox" data-effect="pbr" checked> PBR materials</label>
+      <label><input type="checkbox" data-effect="animation" checked> Timeline animation</label>
+      <div class="debug-actions">
+        <button id="debug-awaken" type="button">Start awakening</button>
+        <button id="debug-reset" type="button">Reset</button>
+      </div>
+      <small>F2 toggles this panel</small>
+    </aside>
     <!-- Compass movement warning (hide after compass interaction in JS) -->
     <div id="compass-warning">
       To move the boat, first interact with the <b>compass</b>!
     </div>
     <!-- Controls Guide -->
     <div id="controls-guide-container">
-      <div id="controls-guide-toggle" onclick="toggleControlsGuide()">?</div>
+      <button id="controls-guide-toggle" type="button" aria-label="Toggle controls" aria-expanded="true" onclick="toggleControlsGuide()">?</button>
       <div id="controls-guide">
         <h3>Controls Guide</h3>
         <ul>
@@ -149,18 +174,37 @@
           <li><b>M</b>: FPS Torch Mode ON/OFF (after lighting)</li>
           <li><b>Mouse Wheel</b>: Adjust torch brightness (in FPS mode)</li>
           <li><b>H</b>: Show/Hide Controls Guide</li>
+          <li><b>F2</b>: Show/Hide Developer Diagnostics</li>
           <li><b>R</b>: Reset Scene</li>
           <li><b>ESC</b>: Release Mouse</li>
         </ul>
         <button onclick="toggleControlsGuide()" id="controls-close-btn">Close</button>
       </div>
     </div>
+    <script>
+      window.addEventListener('error', function(event) {
+        if (event.target && event.target.tagName === 'SCRIPT') {
+          document.getElementById('loading-screen').hidden = true;
+          const panel = document.getElementById('fatal-error');
+          panel.hidden = false;
+          panel.textContent = 'A required script could not be loaded. Check your connection and reload.';
+        }
+      }, true);
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.3/gl-matrix-min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/timeline.js"></script>
+    <script src="js/performance-monitor.js"></script>
+    <script src="js/asset-loader.js"></script>
     <script src="main.js"></script>
+    <script src="js/debug-panel.js"></script>
     <script>
       function toggleControlsGuide() {
         const guide = document.getElementById('controls-guide');
-        guide.style.display = (guide.style.display === 'none') ? 'block' : 'none';
+        const toggle = document.getElementById('controls-guide-toggle');
+        const show = guide.style.display === 'none';
+        guide.style.display = show ? 'block' : 'none';
+        toggle.setAttribute('aria-expanded', String(show));
       }
       // H OPEN/CLOSE
       window.addEventListener('keydown', function(e) {
@@ -170,6 +214,10 @@
       window.hideCompassWarning = function() {
         const el = document.getElementById('compass-warning');
         if (el) el.style.display = 'none';
+      }
+      window.showCompassWarning = function() {
+        const el = document.getElementById('compass-warning');
+        if (el) el.style.display = 'block';
       }
     </script>
 </body>
