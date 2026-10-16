@@ -11,16 +11,26 @@ layout(location = 3) in vec2 aTexCoord;   // <-- UV
 uniform mat4 uModel;
 uniform mat4 uView;
 uniform mat4 uProjection;
+uniform bool uIsParticle;
+uniform float uTime;
 
 // VARYING
 out vec3 vColor;
 out vec3 vNormal;
 out vec3 vFragPos;
 out vec2 vTexCoord;
+out vec3 vLocalPos;
 
 void main() {
     // World pos
-    vec4 worldPosition = uModel * vec4(aPosition, 1.0);
+    vec3 animatedPosition = aPosition;
+    if (uIsParticle) {
+        animatedPosition.x += sin(uTime * 0.35 + aPosition.z * 0.7) * 0.22;
+        animatedPosition.y += sin(uTime * 0.55 + aPosition.x * 0.9) * 0.18;
+        animatedPosition.z += cos(uTime * 0.3 + aPosition.y) * 0.16;
+        gl_PointSize = 2.2 + 2.4 * fract(aTexCoord.x * 17.0);
+    }
+    vec4 worldPosition = uModel * vec4(animatedPosition, 1.0);
     vFragPos = worldPosition.xyz;
 
     // Inverse-transpose keeps normals correct under non-uniform scaling.
@@ -31,6 +41,7 @@ void main() {
 
     // Texture UV (her zaman ilet, obj'de yoksa [0,0] olur)
     vTexCoord = aTexCoord;
+    vLocalPos = aPosition;
 
     // Kamera projeksiyonu
     gl_Position = uProjection * uView * worldPosition;

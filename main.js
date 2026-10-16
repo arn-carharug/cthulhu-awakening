@@ -77,9 +77,13 @@ const STATE = {
     waterIndexCount: 0,
     lastFrameTime: 0,
     quality: defaultQuality,
-    effects: { lighting: true, pbr: true, animation: true },
+    effects: {
+        lighting: true, pbr: true, animation: true,
+        fog: true, particles: true, post: true
+    },
     awakeningTimeline,
     performanceMonitor: null,
+    elapsedTime: 0,
 };
 // Add right after STATE:
 let pillarsRiseY = 0;
@@ -248,7 +252,7 @@ window.addEventListener("mousemove", (event) => {
         STATE.compassHovered = false;
     }
 
-    // --- Torch Hover (only if awakening started and torch is off) ---
+    // --- Torch Hover (a highlighted object must always be actionable) ---
     if (STATE.awakeningStarted && !STATE.torchLit) {
         const rect = STATE.canvas.getBoundingClientRect();
         const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -378,13 +382,19 @@ window.addEventListener('scene:quality', (event) => {
     const quality = event.detail.quality;
     if (!qualityPresets[quality]) return;
     STATE.quality = quality;
-    if (STATE.gl) rebuildWaterMesh(qualityPresets[quality].waterSegments);
+    if (STATE.gl) {
+        rebuildWaterMesh(qualityPresets[quality].waterSegments);
+        rebuildAtmosphere(qualityPresets[quality].particles);
+    }
     resizeCanvas(true);
     sceneEvents.emit('quality:changed', { quality, preset: qualityPresets[quality] });
 });
 window.addEventListener('scene:effect', (event) => {
     if (event.detail.effect in STATE.effects) {
         STATE.effects[event.detail.effect] = event.detail.enabled;
+        if (event.detail.effect === 'post') {
+            document.body.classList.toggle('post-disabled', !event.detail.enabled);
+        }
         sceneEvents.emit('effect:changed', event.detail);
     }
 });
@@ -436,6 +446,14 @@ async function main() {
     STATE.uAOTexLoc = STATE.gl.getUniformLocation(STATE.program, "uAOTex");
     STATE.uMetallicTexLoc = STATE.gl.getUniformLocation(STATE.program, "uMetallicTex");
     STATE.uRoughnessTexLoc = STATE.gl.getUniformLocation(STATE.program, "uRoughnessTex");
+    STATE.uFogEnabledLoc = STATE.gl.getUniformLocation(STATE.program, "uFogEnabled");
+    STATE.uFogDensityLoc = STATE.gl.getUniformLocation(STATE.program, "uFogDensity");
+    STATE.uFogColorLoc = STATE.gl.getUniformLocation(STATE.program, "uFogColor");
+    STATE.uCameraPosLoc = STATE.gl.getUniformLocation(STATE.program, "uCameraPos");
+    STATE.uPostEnabledLoc = STATE.gl.getUniformLocation(STATE.program, "uPostEnabled");
+    STATE.uResolutionLoc = STATE.gl.getUniformLocation(STATE.program, "uResolution");
+    STATE.uTimeLoc = STATE.gl.getUniformLocation(STATE.program, "uTime");
+    STATE.uIsParticleLoc = STATE.gl.getUniformLocation(STATE.program, "uIsParticle");
 
     document.getElementById("loading-status").textContent = "Loading models and textures in parallel";
     const [
@@ -665,12 +683,14 @@ async function main() {
     STATE.waterVBO = waterVBO;
     STATE.waterEBO = waterEBO;
     STATE.waterIndexCount = waterMesh.indices.length;
+    rebuildAtmosphere(qualityPresets[STATE.quality].particles);
 
     // Canvas eventleri vs. aynı kalacak...
     STATE.canvas.addEventListener("click", (event) => {
-        STATE.canvas.requestPointerLock();
+        let interactionHandled = false;
 
-        // 1. Önce compass'a tıklama kontrolü (ve return!)
+        // Resolve the interaction before requesting pointer lock. Pointer-lock
+        // transitions can change event coordinates in some browsers.
         if (!STATE.compassInspectMode) {
             const rect = STATE.canvas.getBoundingClientRect();
             const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -692,24 +712,29 @@ async function main() {
 
             // --- Önce pusulaya tıklanmış mı?
             const compassPos = getCompassPosition();
-            if (rayIntersectsSphere(ray.origin, ray.direction, compassPos, 0.22)) {
+            if (STATE.compassHovered || rayIntersectsSphere(ray.origin, ray.direction, compassPos, 0.28)) {
                 STATE.compassInspectMode = true;
+                STATE.compassHovered = false;
                 window.hideCompassWarning && window.hideCompassWarning();
-                return; // Pusulaya tıklandıysa, torch'u kontrol etme!
+                sceneEvents.emit('interaction:compass');
+                interactionHandled = true;
             }
 
-            // --- Sonra torch tıklama mantığı ---
-            const awakeningComplete = STATE.awakeningStarted && STATE.cthulhuRiseY >= STATE.maxRiseY;
-            if (!awakeningComplete || STATE.torchLit || STATE.torchClicked) return;
-
-            // Aynı mouse koordinatları ve view/projection matrix kullanabilirsin!
-            const torchPos = getTorchPosition();
-            if (rayIntersectsSphere(ray.origin, ray.direction, torchPos, 0.3)) {
-                STATE.torchClicked = true;
-                STATE.torchLit = true;
-                STATE.torchLightIntensity = torchConfig.defaultIntensity;
-                return;
+            if (!interactionHandled && STATE.awakeningStarted && !STATE.torchLit && !STATE.torchClicked) {
+                const torchPos = getTorchPosition();
+                if (STATE.torchHovered || rayIntersectsSphere(ray.origin, ray.direction, torchPos, 0.55)) {
+                    STATE.torchClicked = true;
+                    STATE.torchLit = true;
+                    STATE.torchHovered = false;
+                    STATE.torchLightIntensity = torchConfig.defaultIntensity;
+                    sceneEvents.emit('interaction:torch');
+                    interactionHandled = true;
+                }
             }
+        }
+
+        if (!interactionHandled && document.pointerLockElement !== STATE.canvas) {
+            STATE.canvas.requestPointerLock();
         }
     });
 
@@ -816,6 +841,7 @@ function resetScene() {
     STATE.cameraFront = glMatrix.vec3.fromValues(0, 0, -1);
     STATE.cameraUp = glMatrix.vec3.fromValues(0, 1, 0);
     STATE.lastFrameTime = performance.now();
+    STATE.elapsedTime = 0;
     STATE.awakeningTimeline.reset();
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
@@ -857,6 +883,36 @@ function rebuildWaterMesh(segments) {
     STATE.waterIndexCount = waterMesh.indices.length;
 }
 
+function createEffectsVAO(vertices) {
+    const gl = STATE.gl;
+    const vao = gl.createVertexArray();
+    const buffer = gl.createBuffer();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(STATE.aPositionLoc);
+    gl.vertexAttribPointer(STATE.aPositionLoc, 3, gl.FLOAT, false, 11 * 4, 0);
+    gl.enableVertexAttribArray(STATE.aNormalLoc);
+    gl.vertexAttribPointer(STATE.aNormalLoc, 3, gl.FLOAT, false, 11 * 4, 3 * 4);
+    gl.enableVertexAttribArray(STATE.aColorLoc);
+    gl.vertexAttribPointer(STATE.aColorLoc, 3, gl.FLOAT, false, 11 * 4, 6 * 4);
+    const texCoord = gl.getAttribLocation(STATE.program, 'aTexCoord');
+    gl.enableVertexAttribArray(texCoord);
+    gl.vertexAttribPointer(texCoord, 2, gl.FLOAT, false, 11 * 4, 9 * 4);
+    return { vao, buffer, count: vertices.length / 11 };
+}
+
+function rebuildAtmosphere(particleCount) {
+    if (!STATE.gl || !STATE.program) return;
+    const gl = STATE.gl;
+    if (STATE.particleVAO) gl.deleteVertexArray(STATE.particleVAO);
+    if (STATE.particleVBO) gl.deleteBuffer(STATE.particleVBO);
+    const particles = createEffectsVAO(window.EnvironmentEffects.createDustField(particleCount));
+    STATE.particleVAO = particles.vao;
+    STATE.particleVBO = particles.buffer;
+    STATE.particleCount = particles.count;
+}
+
 function resizeCanvas(force = false) {
     if (!STATE.canvas || !STATE.gl) return;
     const dpr = Math.min(window.devicePixelRatio || 1, qualityPresets[STATE.quality].dpr);
@@ -874,12 +930,14 @@ function resizeCanvas(force = false) {
 }
 
 function getTorchLightWorldPosition() {
-    // FPS torch için torchMatrix torch'un FPS pozisyonunda olmalı!
-    // Torch modelinin ucunun model-space pozisyonu (genellikle [0, 1, 0, 1])
-    const tip = STATE.vec4.fromValues(0, 1, 0, 1);
-    const worldTip = STATE.vec4.create();
-    STATE.vec4.transformMat4(worldTip, tip, STATE.torchMatrix);
-    return [worldTip[0], worldTip[1], worldTip[2]];
+    // The OBJ origin sits inside the lantern chamber. Move the emitter just
+    // beyond its glass so both local and forward light originate at the flame.
+    const modelOrigin = STATE.vec4.fromValues(0, 0, 0, 1);
+    const transformedOrigin = STATE.vec4.create();
+    STATE.vec4.transformMat4(transformedOrigin, modelOrigin, STATE.torchMatrix);
+    const emitter = STATE.vec3.fromValues(transformedOrigin[0], transformedOrigin[1], transformedOrigin[2]);
+    STATE.vec3.scaleAndAdd(emitter, emitter, STATE.cameraFront, 0.22);
+    return emitter;
 }
 
 function drawScene(timestamp) {
@@ -887,12 +945,13 @@ function drawScene(timestamp) {
     resizeCanvas();
     const deltaSeconds = Math.min((timestamp - STATE.lastFrameTime) / 1000, 0.1) || 0;
     STATE.lastFrameTime = timestamp;
+    STATE.elapsedTime += deltaSeconds;
     STATE.performanceMonitor?.update(deltaSeconds);
     if (STATE.effects.animation) STATE.awakeningTimeline.update(deltaSeconds);
 
     // 1. Ambient ve torch intensity logic
     if (STATE.torchLit && !STATE.torchControlMode) {
-        // Keep the world dark: the torch should be a local beam, not global ambient light.
+        // Keep the world dark: the lantern should stay local, not become global ambient light.
         STATE.ambientLight[0] = Math.max(0.025, STATE.ambientLight[0] - 0.8 * deltaSeconds);
         STATE.ambientLight[1] = Math.max(0.03, STATE.ambientLight[1] - 0.8 * deltaSeconds);
         STATE.ambientLight[2] = Math.max(0.04, STATE.ambientLight[2] - 0.8 * deltaSeconds);
@@ -920,6 +979,14 @@ function drawScene(timestamp) {
     const viewMatrix = STATE.mat4.create();
     STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
     gl.uniformMatrix4fv(STATE.uViewLoc, false, viewMatrix);
+    gl.uniform1f(STATE.uTimeLoc, STATE.elapsedTime);
+    gl.uniform3fv(STATE.uCameraPosLoc, cameraPosition);
+    gl.uniform2f(STATE.uResolutionLoc, STATE.canvas.width, STATE.canvas.height);
+    gl.uniform1i(STATE.uFogEnabledLoc, STATE.effects.fog ? 1 : 0);
+    gl.uniform1f(STATE.uFogDensityLoc, STATE.awakeningStarted ? 0.021 : 0.012);
+    gl.uniform3fv(STATE.uFogColorLoc, STATE.awakeningStarted ? [0.018, 0.035, 0.046] : [0.028, 0.055, 0.07]);
+    gl.uniform1i(STATE.uPostEnabledLoc, STATE.effects.post ? 1 : 0);
+    gl.uniform1i(STATE.uIsParticleLoc, 0);
 
     if (STATE.torchLit) {
         STATE.torchMatrix = getFPSTorchMatrix();
@@ -966,9 +1033,12 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uTorchLitLoc, STATE.torchLit && STATE.effects.lighting ? 1 : 0);
     gl.uniform3fv(STATE.uAmbientLightLoc, STATE.ambientLight);
     gl.uniform3fv(STATE.uTorchLightPosLoc, torchLightWorldPos);
+    const torchFlicker = 0.965
+        + Math.sin(STATE.elapsedTime * 17.3) * 0.018
+        + Math.sin(STATE.elapsedTime * 31.7) * 0.012;
     gl.uniform1f(
         STATE.uTorchLightIntensityLoc,
-        STATE.torchLit && STATE.effects.lighting ? STATE.torchLightIntensity : 0.0
+        STATE.torchLit && STATE.effects.lighting ? STATE.torchLightIntensity * torchFlicker : 0.0
     );
     gl.uniform3fv(STATE.uTorchLightColorLoc, [1.0, 0.7, 0.2]);
     gl.uniform3fv(STATE.uTorchDirectionLoc, STATE.cameraFront);
@@ -1129,6 +1199,25 @@ function drawScene(timestamp) {
     gl.bindVertexArray(STATE.cthulhuVAO);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, cthulhuMatrix);
     gl.drawElements(gl.TRIANGLES, STATE.cthulhuIndexCount, STATE.cthulhuIndexType, 0);
+
+    // === DUST / MOISTURE PARTICLES ===
+    if (STATE.effects.particles) {
+        const particleMatrix = STATE.mat4.create();
+        STATE.mat4.translate(particleMatrix, particleMatrix, [
+            STATE.shipPosition[0], STATE.shipPosition[1] + 1.2, STATE.shipPosition[2]
+        ]);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(false);
+        gl.uniform1i(STATE.uUseTextureLoc, 0);
+        gl.uniform1i(STATE.uIsParticleLoc, 1);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, particleMatrix);
+        gl.bindVertexArray(STATE.particleVAO);
+        gl.drawArrays(gl.POINTS, 0, STATE.particleCount);
+        gl.uniform1i(STATE.uIsParticleLoc, 0);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+    }
 
     requestAnimationFrame(drawScene);
 }

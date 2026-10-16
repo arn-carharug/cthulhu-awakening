@@ -54,6 +54,7 @@ js/config.js               Quality presets and scene tuning values
 js/timeline.js             Event bus and deterministic scene timeline
 js/performance-monitor.js  FPS and frame-time diagnostics
 js/debug-panel.js          F2 developer controls
+js/environment-effects.js Procedural atmospheric particles
 shaders/vertex.glsl        World transforms and normal handling
 shaders/fragment.glsl      Material and torch lighting
 assets/models/             OBJ and MTL scene models
@@ -70,6 +71,10 @@ assets/textures/           Textures used by the active scene
 - Canvas resolution follows viewport size and device pixel ratio, capped at 2x.
 - F2 opens a diagnostics panel with quality and effect controls.
 - Models and textures are loaded in parallel.
+- Exponential distance fog thickens during the awakening.
+- The lantern combines short-range omnidirectional light with a broad forward lobe.
+- Procedural dust and moisture particles drift around the camera.
+- Cinematic grading adds tone mapping, vignette, grain, and a cold color bias.
 - Load failures stop startup with a visible error.
 
 ## Deployment

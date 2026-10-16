@@ -130,6 +130,7 @@
 </head>
 <body>
     <canvas id="glCanvas" tabindex="1"></canvas>
+    <div id="cinematic-overlay" aria-hidden="true"></div>
     <div id="loading-screen" role="status" aria-live="polite">
       <div class="loading-title">The sea is stirring…</div>
       <div id="loading-status">Loading shaders and artifacts</div>
@@ -151,6 +152,9 @@
       <label><input type="checkbox" data-effect="lighting" checked> Torch lighting</label>
       <label><input type="checkbox" data-effect="pbr" checked> PBR materials</label>
       <label><input type="checkbox" data-effect="animation" checked> Timeline animation</label>
+      <label><input type="checkbox" data-effect="fog" checked> Atmospheric fog</label>
+      <label><input type="checkbox" data-effect="particles" checked> Dust particles</label>
+      <label><input type="checkbox" data-effect="post" checked> Cinematic grading</label>
       <div class="debug-actions">
         <button id="debug-awaken" type="button">Start awakening</button>
         <button id="debug-reset" type="button">Reset</button>
@@ -195,6 +199,7 @@
     <script src="js/config.js"></script>
     <script src="js/timeline.js"></script>
     <script src="js/performance-monitor.js"></script>
+    <script src="js/environment-effects.js"></script>
     <script src="js/asset-loader.js"></script>
     <script src="main.js"></script>
     <script src="js/debug-panel.js"></script>

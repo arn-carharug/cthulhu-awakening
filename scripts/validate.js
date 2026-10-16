@@ -19,6 +19,12 @@ async function validate() {
     vm.runInThisContext(loaderSource, { filename: 'asset-loader.js' });
     const timelineSource = await fs.readFile(path.join(root, 'js', 'timeline.js'), 'utf8');
     vm.runInThisContext(timelineSource, { filename: 'timeline.js' });
+    const effectsSource = await fs.readFile(path.join(root, 'js', 'environment-effects.js'), 'utf8');
+    vm.runInThisContext(effectsSource, { filename: 'environment-effects.js' });
+
+    const dustMesh = EnvironmentEffects.createDustField(120);
+    assert.equal(dustMesh.length, 120 * 11, 'particle mesh layout is invalid');
+    assert.ok([...dustMesh].every(Number.isFinite), 'environment mesh contains invalid values');
 
     const events = new SceneRuntime.EventBus();
     let cueCount = 0;
@@ -60,7 +66,7 @@ async function validate() {
 
     const requiredFiles = [
         'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js',
-        'js/performance-monitor.js', 'js/debug-panel.js',
+        'js/performance-monitor.js', 'js/debug-panel.js', 'js/environment-effects.js',
         'shaders/vertex.glsl', 'shaders/fragment.glsl',
         'assets/textures/WeatheredWood2_S.jpg', 'assets/textures/OC1KI90.jpg',
         'assets/textures/germany010.jpg', 'assets/textures/beautiful-photo-sea-waves.jpg',

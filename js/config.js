@@ -1,8 +1,8 @@
 (function exposeGameConfig(global) {
     const QUALITY_PRESETS = Object.freeze({
-        low: Object.freeze({ label: 'Low', dpr: 1, waterSegments: 90, usePBR: false }),
-        medium: Object.freeze({ label: 'Medium', dpr: 1.5, waterSegments: 140, usePBR: true }),
-        high: Object.freeze({ label: 'High', dpr: 2, waterSegments: 200, usePBR: true })
+        low: Object.freeze({ label: 'Low', dpr: 1, waterSegments: 90, particles: 90, usePBR: false }),
+        medium: Object.freeze({ label: 'Medium', dpr: 1.5, waterSegments: 140, particles: 190, usePBR: true }),
+        high: Object.freeze({ label: 'High', dpr: 2, waterSegments: 200, particles: 320, usePBR: true })
     });
 
     global.GameConfig = Object.freeze({
