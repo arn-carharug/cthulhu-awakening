@@ -14,6 +14,7 @@
             pillars: Object.freeze({ start: 0, duration: 8.4, distance: 25 }),
             cthulhu: Object.freeze({ start: 0.6, duration: 33.4, distance: 80 })
         }),
-        torch: Object.freeze({ defaultIntensity: 5, automaticIntensity: 6, manualMax: 12 })
+        torch: Object.freeze({ defaultIntensity: 5, automaticIntensity: 6, manualMax: 12 }),
+        ocean: Object.freeze({ waveHeight: 0.72, waveSpeed: 0.82, foamThreshold: 0.48 })
     });
 }(window));

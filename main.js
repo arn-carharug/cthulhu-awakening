@@ -1,5 +1,8 @@
 const { loadOBJWithMTL, loadTexture, loadShaderSource, compileShader, createProgram, makeIndexArray } = window.AssetLoader;
-const { defaultQuality, qualityPresets, camera: cameraConfig, awakening: awakeningConfig, torch: torchConfig } = window.GameConfig;
+const {
+    defaultQuality, qualityPresets, camera: cameraConfig,
+    awakening: awakeningConfig, torch: torchConfig, ocean: oceanConfig
+} = window.GameConfig;
 const sceneEvents = new window.SceneRuntime.EventBus();
 const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
     duration: awakeningConfig.duration,
@@ -79,11 +82,14 @@ const STATE = {
     quality: defaultQuality,
     effects: {
         lighting: true, pbr: true, animation: true,
-        fog: true, particles: true, post: true
+        fog: true, particles: true, post: true,
+        water: true, boatMotion: true, lightning: true
     },
     awakeningTimeline,
     performanceMonitor: null,
     elapsedTime: 0,
+    boatMotion: { bob: 0, roll: 0, pitch: 0 },
+    lightning: new window.WeatherSystem.LightningSystem(),
 };
 // Add right after STATE:
 let pillarsRiseY = 0;
@@ -150,6 +156,27 @@ function toRadians(degrees) {
     return degrees * (Math.PI / 180);
 }
 
+function updateBoatMotion() {
+    if (!STATE.effects.boatMotion || !STATE.effects.water) {
+        STATE.boatMotion = { bob: 0, roll: 0, pitch: 0 };
+        return;
+    }
+    const time = STATE.elapsedTime * oceanConfig.waveSpeed;
+    const wave = Math.sin(time) * 0.48
+        + Math.sin(-time * 0.73) * 0.32
+        + Math.sin(time * 0.46) * 0.20;
+    STATE.boatMotion.bob = wave * oceanConfig.waveHeight;
+    STATE.boatMotion.roll = Math.sin(time * 0.73 + 0.8) * 0.035;
+    STATE.boatMotion.pitch = Math.sin(time * 0.91) * 0.022;
+}
+
+function getCameraPosition() {
+    const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
+    cameraPosition[1] += 1.2 + STATE.boatMotion.bob * 0.62;
+    cameraPosition[2] += 0.3;
+    return cameraPosition;
+}
+
 // FPS torch: small torch with fixed offset relative to camera
 function getTorchPosition() {
     if (STATE.torchLit) {
@@ -158,9 +185,7 @@ function getTorchPosition() {
         const rightDist = 0.5;
         const downDist = -0.4;
 
-        const cameraPos = STATE.vec3.clone(STATE.shipPosition);
-        cameraPos[1] += 1.2;
-        cameraPos[2] += 0.3;
+        const cameraPos = getCameraPosition();
 
         const front = STATE.vec3.clone(STATE.cameraFront);
         STATE.vec3.normalize(front, front);
@@ -184,7 +209,7 @@ function getTorchPosition() {
         // Static torch: standing upright on the boat (same as in drawScene)
         return [
             STATE.shipPosition[0] + 0.8, // X
-            STATE.shipPosition[1],      // Y
+            STATE.shipPosition[1] + STATE.boatMotion.bob,
             STATE.shipPosition[2] - 1.2 // Z
         ];
     }
@@ -233,9 +258,7 @@ window.addEventListener("mousemove", (event) => {
 
         // Camera setup
         const viewMatrix = STATE.mat4.create();
-        const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
-        cameraPosition[1] += 1.2;
-        cameraPosition[2] += 0.3;
+        const cameraPosition = getCameraPosition();
         const target = STATE.vec3.create();
         STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
         STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
@@ -259,9 +282,8 @@ window.addEventListener("mousemove", (event) => {
         const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
         const viewMatrix = STATE.mat4.create();
-        const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
-        cameraPosition[1] += 1.2;
-        cameraPosition[2] += 1.5;
+        const cameraPosition = getCameraPosition();
+        cameraPosition[2] += 1.2;
         const target = STATE.vec3.create();
         STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
         STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
@@ -272,7 +294,7 @@ window.addEventListener("mousemove", (event) => {
         const ray = getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix);
         const pickPos = [
             STATE.shipPosition[0] + 0.8,
-            STATE.shipPosition[1],
+            STATE.shipPosition[1] + STATE.boatMotion.bob,
             STATE.shipPosition[2] - 1.2
         ];
         STATE.torchHovered = rayIntersectsSphere(ray.origin, ray.direction, pickPos, 0.6);
@@ -454,6 +476,11 @@ async function main() {
     STATE.uResolutionLoc = STATE.gl.getUniformLocation(STATE.program, "uResolution");
     STATE.uTimeLoc = STATE.gl.getUniformLocation(STATE.program, "uTime");
     STATE.uIsParticleLoc = STATE.gl.getUniformLocation(STATE.program, "uIsParticle");
+    STATE.uIsWaterLoc = STATE.gl.getUniformLocation(STATE.program, "uIsWater");
+    STATE.uWaveHeightLoc = STATE.gl.getUniformLocation(STATE.program, "uWaveHeight");
+    STATE.uWaveSpeedLoc = STATE.gl.getUniformLocation(STATE.program, "uWaveSpeed");
+    STATE.uFoamThresholdLoc = STATE.gl.getUniformLocation(STATE.program, "uFoamThreshold");
+    STATE.uLightningIntensityLoc = STATE.gl.getUniformLocation(STATE.program, "uLightningIntensity");
 
     document.getElementById("loading-status").textContent = "Loading models and textures in parallel";
     const [
@@ -698,9 +725,7 @@ async function main() {
 
             // Kamera bilgisi
             const viewMatrix = STATE.mat4.create();
-            const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
-            cameraPosition[1] += 1.2;
-            cameraPosition[2] += 0.3;
+            const cameraPosition = getCameraPosition();
             const target = STATE.vec3.create();
             STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
             STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
@@ -747,15 +772,13 @@ async function main() {
 function getCompassPosition() {
     return [
         STATE.shipPosition[0] - 0.6,
-        STATE.shipPosition[1],
+        STATE.shipPosition[1] + STATE.boatMotion.bob,
         STATE.shipPosition[2] - 1.4
     ];
 }
 function getFPSTorchMatrix() {
     // 1. Kamera pozisyonunu al
-    const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
-    cameraPosition[1] += 1.2;
-    cameraPosition[2] += 0.3;
+    const cameraPosition = getCameraPosition();
 
     // 2. FPS torch için offset uygula (önde ve sağda dursun)
     const forwardDist = 1.0;
@@ -842,6 +865,8 @@ function resetScene() {
     STATE.cameraUp = glMatrix.vec3.fromValues(0, 1, 0);
     STATE.lastFrameTime = performance.now();
     STATE.elapsedTime = 0;
+    STATE.boatMotion = { bob: 0, roll: 0, pitch: 0 };
+    STATE.lightning.reset();
     STATE.awakeningTimeline.reset();
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
@@ -948,6 +973,10 @@ function drawScene(timestamp) {
     STATE.elapsedTime += deltaSeconds;
     STATE.performanceMonitor?.update(deltaSeconds);
     if (STATE.effects.animation) STATE.awakeningTimeline.update(deltaSeconds);
+    if (STATE.effects.lightning) {
+        const struck = STATE.lightning.update(deltaSeconds, STATE.awakeningStarted);
+        if (struck) sceneEvents.emit('weather:lightning', { intensity: STATE.lightning.intensity });
+    }
 
     // 1. Ambient ve torch intensity logic
     if (STATE.torchLit && !STATE.torchControlMode) {
@@ -970,9 +999,8 @@ function drawScene(timestamp) {
     document.getElementById("torch-brightness").textContent = STATE.torchLightIntensity.toFixed(2);
 
     // 2. View ve kamera ayarı
-    let cameraPosition = STATE.vec3.clone(STATE.shipPosition);
-    cameraPosition[1] += 1.2;
-    cameraPosition[2] += 0.3;
+    updateBoatMotion();
+    let cameraPosition = getCameraPosition();
     let target = STATE.vec3.create();
     STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
 
@@ -987,6 +1015,12 @@ function drawScene(timestamp) {
     gl.uniform3fv(STATE.uFogColorLoc, STATE.awakeningStarted ? [0.018, 0.035, 0.046] : [0.028, 0.055, 0.07]);
     gl.uniform1i(STATE.uPostEnabledLoc, STATE.effects.post ? 1 : 0);
     gl.uniform1i(STATE.uIsParticleLoc, 0);
+    gl.uniform1i(STATE.uIsWaterLoc, 0);
+    gl.uniform1f(STATE.uWaveHeightLoc, STATE.effects.water ? oceanConfig.waveHeight : 0);
+    gl.uniform1f(STATE.uWaveSpeedLoc, oceanConfig.waveSpeed);
+    gl.uniform1f(STATE.uFoamThresholdLoc, oceanConfig.foamThreshold);
+    const lightningIntensity = STATE.effects.lightning ? STATE.lightning.intensity : 0;
+    gl.uniform1f(STATE.uLightningIntensityLoc, lightningIntensity);
 
     if (STATE.torchLit) {
         STATE.torchMatrix = getFPSTorchMatrix();
@@ -994,7 +1028,7 @@ function drawScene(timestamp) {
         STATE.mat4.identity(STATE.torchMatrix);
         STATE.mat4.translate(STATE.torchMatrix, STATE.torchMatrix, [
             STATE.shipPosition[0] + 0.8,
-            STATE.shipPosition[1],
+            STATE.shipPosition[1] + STATE.boatMotion.bob,
             STATE.shipPosition[2] - 1.1
         ]);
         STATE.mat4.rotateX(STATE.torchMatrix, STATE.torchMatrix, -Math.PI / 8);
@@ -1002,6 +1036,12 @@ function drawScene(timestamp) {
     }
 
     // 4. Uniform'lar ve temizlik
+    gl.clearColor(
+        0.0 + lightningIntensity * 0.12,
+        0.035 + lightningIntensity * 0.18,
+        0.075 + lightningIntensity * 0.28,
+        1.0
+    );
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // === WATER DRAW ===
@@ -1010,6 +1050,7 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uTextureLoc, 4);
     gl.uniform1i(STATE.uUseTextureLoc, 1);
     gl.uniform1i(STATE.uUsePBRLoc, 0);
+    gl.uniform1i(STATE.uIsWaterLoc, 1);
 
     gl.bindVertexArray(STATE.waterVAO);
 
@@ -1027,6 +1068,7 @@ function drawScene(timestamp) {
     gl.drawElements(gl.TRIANGLES, STATE.waterIndexCount, gl.UNSIGNED_INT, 0);
 
     gl.uniform1i(STATE.uUseTextureLoc, 0);
+    gl.uniform1i(STATE.uIsWaterLoc, 0);
 
     // --- Torch ışık pozisyonu ve rengi ---
     const torchLightWorldPos = getTorchLightWorldPosition();
@@ -1096,9 +1138,7 @@ function drawScene(timestamp) {
         const compassMatrix = STATE.mat4.create();
         STATE.mat4.identity(compassMatrix);
 
-        let cameraPos = STATE.vec3.clone(STATE.shipPosition);
-        cameraPos[1] += 1.2;
-        cameraPos[2] += 0.3;
+        let cameraPos = getCameraPosition();
         let inspectPos = STATE.vec3.create();
         STATE.vec3.scaleAndAdd(inspectPos, cameraPos, STATE.cameraFront, 1.0);
         STATE.mat4.translate(compassMatrix, compassMatrix, inspectPos);
@@ -1137,7 +1177,13 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uUsePBRLoc, 0);
     gl.bindVertexArray(STATE.shipVAO);
     const modelMatrix = STATE.mat4.create();
-    STATE.mat4.translate(modelMatrix, modelMatrix, STATE.shipPosition);
+    STATE.mat4.translate(modelMatrix, modelMatrix, [
+        STATE.shipPosition[0],
+        STATE.shipPosition[1] + STATE.boatMotion.bob,
+        STATE.shipPosition[2]
+    ]);
+    STATE.mat4.rotateZ(modelMatrix, modelMatrix, STATE.boatMotion.roll);
+    STATE.mat4.rotateX(modelMatrix, modelMatrix, STATE.boatMotion.pitch);
     STATE.mat4.rotateX(modelMatrix, modelMatrix, Math.PI / 2);
     STATE.mat4.rotateY(modelMatrix, modelMatrix, Math.PI);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
@@ -1204,7 +1250,7 @@ function drawScene(timestamp) {
     if (STATE.effects.particles) {
         const particleMatrix = STATE.mat4.create();
         STATE.mat4.translate(particleMatrix, particleMatrix, [
-            STATE.shipPosition[0], STATE.shipPosition[1] + 1.2, STATE.shipPosition[2]
+            STATE.shipPosition[0], STATE.shipPosition[1] + 1.2 + STATE.boatMotion.bob, STATE.shipPosition[2]
         ]);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

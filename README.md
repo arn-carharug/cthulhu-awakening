@@ -55,6 +55,7 @@ js/timeline.js             Event bus and deterministic scene timeline
 js/performance-monitor.js  FPS and frame-time diagnostics
 js/debug-panel.js          F2 developer controls
 js/environment-effects.js Procedural atmospheric particles
+js/weather-system.js      Deterministic lightning and storm timing
 shaders/vertex.glsl        World transforms and normal handling
 shaders/fragment.glsl      Material and torch lighting
 assets/models/             OBJ and MTL scene models
@@ -75,6 +76,9 @@ assets/textures/           Textures used by the active scene
 - The lantern combines short-range omnidirectional light with a broad forward lobe.
 - Procedural dust and moisture particles drift around the camera.
 - Cinematic grading adds tone mapping, vignette, grain, and a cold color bias.
+- The ocean uses multi-directional vertex waves, dynamic normals, foam, and Fresnel reflections.
+- Boat and camera motion are synchronized with the active wave field.
+- Lightning flashes intensify during the awakening and affect both objects and sky color.
 - Load failures stop startup with a visible error.
 
 ## Deployment

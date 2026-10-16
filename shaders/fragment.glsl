@@ -6,6 +6,7 @@ in vec3 vNormal;
 in vec3 vFragPos;
 in vec2 vTexCoord;
 in vec3 vLocalPos;
+in float vWaveHeight;
 
 uniform bool uCompassHovered;
 uniform bool uIsCompass;
@@ -33,6 +34,9 @@ uniform bool uPostEnabled;
 uniform vec2 uResolution;
 uniform float uTime;
 uniform bool uIsParticle;
+uniform bool uIsWater;
+uniform float uFoamThreshold;
+uniform float uLightningIntensity;
 
 out vec4 fragColor;
 
@@ -77,6 +81,7 @@ float randomNoise(vec2 coordinate) {
 }
 
 vec3 finishSceneColor(vec3 color) {
+    color += vec3(0.42, 0.58, 0.78) * uLightningIntensity;
     if (uFogEnabled) {
         float distanceFromCamera = length(vFragPos - uCameraPos);
         float fogAmount = 1.0 - exp(-uFogDensity * distanceFromCamera);
@@ -112,6 +117,17 @@ void main() {
     }
     if (uUseTexture) {
         baseColor = texture(uTexture, vTexCoord).rgb;
+        if (uIsWater) {
+            vec3 viewDirection = normalize(uCameraPos - vFragPos);
+            float fresnel = pow(1.0 - max(dot(normalize(vNormal), viewDirection), 0.0), 3.0);
+            vec3 deepWater = vec3(0.008, 0.045, 0.072);
+            vec3 reflectedSky = vec3(0.075, 0.16, 0.23) + uLightningIntensity * vec3(0.3, 0.42, 0.58);
+            float textureDetail = dot(baseColor, vec3(0.333));
+            baseColor = mix(deepWater, reflectedSky, fresnel * 0.78 + textureDetail * 0.12);
+            float foam = smoothstep(uFoamThreshold, 0.92, vWaveHeight);
+            float brokenFoam = foam * (0.55 + 0.45 * randomNoise(vFragPos.xz * 5.0 + uTime));
+            baseColor = mix(baseColor, vec3(0.55, 0.66, 0.67), brokenFoam * 0.58);
+        }
         vec3 ao = uUsePBR ? texture(uAOTex, vTexCoord).rgb : vec3(1.0);
         float metallic = uUsePBR ? texture(uMetallicTex, vTexCoord).r : 0.0;
         float roughness = uUsePBR ? texture(uRoughnessTex, vTexCoord).r : 0.35;
