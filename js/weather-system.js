@@ -2,6 +2,7 @@
     class LightningSystem {
         constructor(seed = 9417) {
             this.seed = seed >>> 0;
+            this.intervalScale = 1;
             this.reset();
         }
 
@@ -13,7 +14,7 @@
         schedule(awakening) {
             const minimum = awakening ? 2.8 : 7.0;
             const spread = awakening ? 5.0 : 10.0;
-            this.nextStrike = minimum + this.random() * spread;
+            this.nextStrike = (minimum + this.random() * spread) * this.intervalScale;
         }
 
         update(deltaSeconds, awakening) {
@@ -39,6 +40,11 @@
             this.intensity = intensity;
             this.aftershock = intensity * 0.28;
             this.nextStrike = 2.5 + this.random() * 3.0;
+        }
+
+        setProfile({ intervalScale = 1 } = {}) {
+            this.intervalScale = Math.max(0.45, Math.min(2, intervalScale));
+            this.schedule(false);
         }
 
         reset() {

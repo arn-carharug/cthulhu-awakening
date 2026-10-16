@@ -10,6 +10,7 @@ in float vWaveHeight;
 
 uniform bool uCompassHovered;
 uniform bool uIsCompass;
+uniform bool uIsShip;
 uniform bool uTorchHovered;
 uniform bool uIsTorch;
 uniform vec3 uAmbientLight;
@@ -39,6 +40,7 @@ uniform float uEyeIntensity;
 uniform bool uIsWater;
 uniform float uFoamThreshold;
 uniform float uLightningIntensity;
+uniform vec3 uLightningColor;
 uniform bool uIsCthulhu;
 uniform float uCthulhuReveal;
 
@@ -85,7 +87,7 @@ float randomNoise(vec2 coordinate) {
 }
 
 vec3 finishSceneColor(vec3 color) {
-    color += vec3(0.42, 0.58, 0.78) * uLightningIntensity;
+    color += uLightningColor * uLightningIntensity;
     if (uFogEnabled) {
         float distanceFromCamera = length(vFragPos - uCameraPos);
         float fogAmount = 1.0 - exp(-uFogDensity * distanceFromCamera);
@@ -131,11 +133,20 @@ void main() {
     }
     if (uUseTexture) {
         baseColor = texture(uTexture, vTexCoord).rgb;
+        if (uIsCompass) {
+            // The generated albedo contains engraved brass and patina. Preserve
+            // its contrast while removing the flat-paper response of the old map.
+            baseColor = pow(baseColor, vec3(1.08)) * vec3(0.94, 0.86, 0.7);
+        }
+        if (uIsShip) {
+            // Dark, salt-soaked timber with restrained green-grey weathering.
+            baseColor = pow(baseColor, vec3(1.12)) * vec3(0.72, 0.79, 0.75);
+        }
         if (uIsWater) {
             vec3 viewDirection = normalize(uCameraPos - vFragPos);
             float fresnel = pow(1.0 - max(dot(normalize(vNormal), viewDirection), 0.0), 3.0);
             vec3 deepWater = vec3(0.008, 0.045, 0.072);
-            vec3 reflectedSky = vec3(0.075, 0.16, 0.23) + uLightningIntensity * vec3(0.3, 0.42, 0.58);
+            vec3 reflectedSky = vec3(0.075, 0.16, 0.23) + uLightningIntensity * uLightningColor * 0.72;
             float textureDetail = dot(baseColor, vec3(0.333));
             baseColor = mix(deepWater, reflectedSky, fresnel * 0.78 + textureDetail * 0.12);
             float foam = smoothstep(uFoamThreshold, 0.92, vWaveHeight);
@@ -143,8 +154,8 @@ void main() {
             baseColor = mix(baseColor, vec3(0.55, 0.66, 0.67), brokenFoam * 0.58);
         }
         vec3 ao = uUsePBR ? texture(uAOTex, vTexCoord).rgb : vec3(1.0);
-        float metallic = uUsePBR ? texture(uMetallicTex, vTexCoord).r : 0.0;
-        float roughness = uUsePBR ? texture(uRoughnessTex, vTexCoord).r : 0.35;
+        float metallic = uUsePBR ? texture(uMetallicTex, vTexCoord).r : (uIsCompass ? 0.82 : 0.0);
+        float roughness = uUsePBR ? texture(uRoughnessTex, vTexCoord).r : (uIsCompass ? 0.31 : (uIsShip ? 0.68 : 0.35));
         baseColor *= ao;
         float rough = 1.0 - roughness;
         float metal = metallic;
@@ -152,6 +163,19 @@ void main() {
         vec3 ambient = uAmbientLight * baseColor * 0.4;
         vec3 diffuse = baseColor * light * 0.7 * rough;
         vec3 color = ambient + diffuse;
+        vec3 normal = normalize(vNormal);
+        vec3 viewDirection = normalize(uCameraPos - vFragPos);
+        vec3 keyDirection = normalize(vec3(0.3, 0.8, 0.4));
+        vec3 halfDirection = normalize(viewDirection + keyDirection);
+        float specularPower = mix(10.0, 72.0, 1.0 - roughness);
+        float surfaceSpecular = pow(max(dot(normal, halfDirection), 0.0), specularPower);
+        vec3 specularColor = mix(vec3(0.055), baseColor, metallic * 0.72);
+        color += specularColor * surfaceSpecular * (uIsCompass ? 1.35 : 0.42);
+        if (uIsShip) {
+            float wetFresnel = pow(1.0 - max(dot(normal, viewDirection), 0.0), 4.0);
+            float brokenWetness = 0.58 + 0.42 * randomNoise(vTexCoord * 310.0);
+            color += vec3(0.07, 0.105, 0.11) * wetFresnel * brokenWetness * 0.72;
+        }
         color += calculateTorchLight(baseColor, metal);
         if (uIsCthulhu) {
             float silhouette = mix(0.025, 1.0, smoothstep(0.0, 1.0, uCthulhuReveal));

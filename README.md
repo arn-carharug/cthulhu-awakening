@@ -58,6 +58,7 @@ js/performance-monitor.js  FPS and frame-time diagnostics
 js/debug-panel.js          F2 developer controls
 js/environment-effects.js Procedural atmospheric particles
 js/weather-system.js      Deterministic lightning and storm timing
+js/omen-system.js         Cycle-specific sea, fog, storm, and horizon omens
 js/audio-system.js        Procedural wind, rumble, thunder, and heartbeat
 js/ritual-presentation.js Cinematic captions, progress, and ending state
 js/game-loop.js           Ritual objectives, cycle tracking, and run statistics
@@ -73,6 +74,8 @@ assets/textures/           Textures used by the active scene
 - OBJ polygons are triangulated during loading.
 - Index buffers automatically use 16- or 32-bit indices.
 - Only Cthulhu uses the AO/metallic/roughness material path.
+- The compass uses an aged engraved-brass texture with a dedicated metallic response.
+- The boat uses salt-weathered wet timber with controlled roughness and Fresnel sheen.
 - Animation uses elapsed time and is independent of display refresh rate.
 - Canvas resolution follows viewport size and device pixel ratio, capped at 2x.
 - F2 opens a diagnostics panel with quality and effect controls.
@@ -92,6 +95,8 @@ assets/textures/           Textures used by the active scene
 - The completed ending can be dismissed with “Keep watching” to continue inspecting the scene.
 - Ritual VI turns the experience into a four-step loop: read the compass, approach R'lyeh, raise the lantern, and bear witness.
 - Each completed cycle reports elapsed time, lantern focus accuracy, and the longest uninterrupted hold before allowing another run.
+- Ritual VII assigns each cycle one of four hidden omens—The Black Tide, The Red Wake, The Drowned Star, or The Hollow Calm—which reshapes fog, waves, lightning, and Cthulhu's horizon position.
+- Ritual VII deliberately keeps the three pillar positions and their awakening animation unchanged.
 - Motion-sensitive visitors inherit their operating system's reduced-motion preference.
 - Load failures stop startup with a visible error.
 

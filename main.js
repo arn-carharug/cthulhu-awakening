@@ -7,6 +7,9 @@ const sceneEvents = new window.SceneRuntime.EventBus();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
 const ritualCycle = new window.RitualCycle(sceneEvents);
+const omenSystem = new window.OmenSystem(sceneEvents);
+const initialOmen = omenSystem.beginCycle(ritualCycle.cycle);
+ritualCycle.setOmen(initialOmen.label);
 const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
     duration: awakeningConfig.duration,
     events: sceneEvents,
@@ -98,9 +101,12 @@ const STATE = {
     elapsedTime: 0,
     boatMotion: { bob: 0, roll: 0, pitch: 0 },
     lightning: new window.WeatherSystem.LightningSystem(),
+    omen: initialOmen,
     cinematic: { compassSpin: false, surge: false, eyes: false, shake: 0, torchShock: 0 },
     witness: { active: false, focus: 0, complete: false },
 };
+
+STATE.lightning.setProfile({ intervalScale: STATE.omen.lightningInterval });
 
 sceneEvents.on('awakening:rumble', () => { STATE.cinematic.shake = 0.18; });
 sceneEvents.on('awakening:compass', () => { STATE.cinematic.compassSpin = true; });
@@ -227,11 +233,11 @@ function updateBoatMotion() {
         STATE.boatMotion = { bob: 0, roll: 0, pitch: 0 };
         return;
     }
-    const time = STATE.elapsedTime * oceanConfig.waveSpeed;
+    const time = STATE.elapsedTime * oceanConfig.waveSpeed * STATE.omen.waveSpeed;
     const wave = Math.sin(time) * 0.48
         + Math.sin(-time * 0.73) * 0.32
         + Math.sin(time * 0.46) * 0.20;
-    STATE.boatMotion.bob = wave * oceanConfig.waveHeight;
+    STATE.boatMotion.bob = wave * oceanConfig.waveHeight * STATE.omen.waveHeight;
     STATE.boatMotion.roll = Math.sin(time * 0.73 + 0.8) * 0.035;
     STATE.boatMotion.pitch = Math.sin(time * 0.91) * 0.022;
 }
@@ -539,6 +545,7 @@ async function main() {
     STATE.uTorchDirectionLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchDirection");
     STATE.uCompassHoveredLoc = STATE.gl.getUniformLocation(STATE.program, "uCompassHovered");
     STATE.uIsCompassLoc = STATE.gl.getUniformLocation(STATE.program, "uIsCompass");
+    STATE.uIsShipLoc = STATE.gl.getUniformLocation(STATE.program, "uIsShip");
     STATE.uTextureLoc = STATE.gl.getUniformLocation(STATE.program, "uTexture");
     STATE.uUseTextureLoc = STATE.gl.getUniformLocation(STATE.program, "uUseTexture");
     STATE.uUsePBRLoc = STATE.gl.getUniformLocation(STATE.program, "uUsePBR");
@@ -560,6 +567,7 @@ async function main() {
     STATE.uWaveSpeedLoc = STATE.gl.getUniformLocation(STATE.program, "uWaveSpeed");
     STATE.uFoamThresholdLoc = STATE.gl.getUniformLocation(STATE.program, "uFoamThreshold");
     STATE.uLightningIntensityLoc = STATE.gl.getUniformLocation(STATE.program, "uLightningIntensity");
+    STATE.uLightningColorLoc = STATE.gl.getUniformLocation(STATE.program, "uLightningColor");
     STATE.uIsCthulhuLoc = STATE.gl.getUniformLocation(STATE.program, "uIsCthulhu");
     STATE.uCthulhuRevealLoc = STATE.gl.getUniformLocation(STATE.program, "uCthulhuReveal");
 
@@ -569,10 +577,10 @@ async function main() {
         pillarsTexture, pillarsModel, cthulhuTexture, cthulhuAOTex,
         cthulhuMetallicTex, cthulhuRoughnessTex, cthulhuModel, waterTexture
     ] = await Promise.all([
-        loadTexture(STATE.gl, 'assets/textures/WeatheredWood2_S.jpg'),
+        loadTexture(STATE.gl, 'assets/textures/boat_wood_wet_v2.png'),
         loadOBJWithMTL('assets/models/woodBoat.obj', 'assets/models/woodBoat.mtl', true),
         loadOBJWithMTL('assets/models/torch.obj', 'assets/models/torch.mtl', false),
-        loadTexture(STATE.gl, 'assets/textures/OC1KI90.jpg'),
+        loadTexture(STATE.gl, 'assets/textures/compass_brass_v2.png'),
         loadOBJWithMTL('assets/models/compass.obj', 'assets/models/compass.mtl', true),
         loadTexture(STATE.gl, 'assets/textures/germany010.jpg'),
         loadOBJWithMTL('assets/models/pillars.obj', 'assets/models/pillars.mtl', true),
@@ -959,6 +967,9 @@ function resetScene() {
     ritualAudio.reset();
     ritualPresentation.reset();
     ritualCycle.start(true);
+    STATE.omen = omenSystem.beginCycle(ritualCycle.cycle);
+    ritualCycle.setOmen(STATE.omen.label);
+    STATE.lightning.setProfile({ intervalScale: STATE.omen.lightningInterval });
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
     window.showCompassWarning?.();
@@ -1142,23 +1153,30 @@ function drawScene(timestamp) {
     gl.uniform3fv(STATE.uCameraPosLoc, cameraPosition);
     gl.uniform2f(STATE.uResolutionLoc, STATE.canvas.width, STATE.canvas.height);
     gl.uniform1i(STATE.uFogEnabledLoc, STATE.effects.fog ? 1 : 0);
-    gl.uniform1f(STATE.uFogDensityLoc, STATE.awakeningStarted ? 0.021 : 0.012);
-    gl.uniform3fv(STATE.uFogColorLoc, STATE.awakeningStarted ? [0.018, 0.035, 0.046] : [0.028, 0.055, 0.07]);
+    const calmFog = [0.028, 0.055, 0.07];
+    const omenFog = STATE.omen.fogColor;
+    const fogColor = STATE.awakeningStarted
+        ? omenFog
+        : calmFog.map((value, index) => value * 0.72 + omenFog[index] * 0.28);
+    gl.uniform1f(STATE.uFogDensityLoc, (STATE.awakeningStarted ? 0.021 : 0.012) * STATE.omen.fogDensity);
+    gl.uniform3fv(STATE.uFogColorLoc, fogColor);
     gl.uniform1i(STATE.uPostEnabledLoc, STATE.effects.post ? 1 : 0);
     gl.uniform1i(STATE.uIsParticleLoc, 0);
     gl.uniform1i(STATE.uIsEyeLoc, 0);
     gl.uniform1f(STATE.uEyeIntensityLoc, 0);
     gl.uniform1i(STATE.uIsCthulhuLoc, 0);
+    gl.uniform1i(STATE.uIsShipLoc, 0);
     gl.uniform1f(STATE.uCthulhuRevealLoc, 0);
     gl.uniform1i(STATE.uIsWaterLoc, 0);
     const surgeProgress = STATE.cinematic.surge
         ? Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 5) / 12))
         : 0;
-    gl.uniform1f(STATE.uWaveHeightLoc, STATE.effects.water ? oceanConfig.waveHeight * (1 + surgeProgress * 1.05) : 0);
-    gl.uniform1f(STATE.uWaveSpeedLoc, oceanConfig.waveSpeed);
+    gl.uniform1f(STATE.uWaveHeightLoc, STATE.effects.water ? oceanConfig.waveHeight * STATE.omen.waveHeight * (1 + surgeProgress * 1.05) : 0);
+    gl.uniform1f(STATE.uWaveSpeedLoc, oceanConfig.waveSpeed * STATE.omen.waveSpeed);
     gl.uniform1f(STATE.uFoamThresholdLoc, oceanConfig.foamThreshold);
-    const lightningIntensity = STATE.effects.lightning ? STATE.lightning.intensity : 0;
+    const lightningIntensity = STATE.effects.lightning ? STATE.lightning.intensity * STATE.omen.lightningGain : 0;
     gl.uniform1f(STATE.uLightningIntensityLoc, lightningIntensity);
+    gl.uniform3fv(STATE.uLightningColorLoc, STATE.omen.lightningColor);
 
     if (STATE.torchLit) {
         STATE.torchMatrix = getFPSTorchMatrix();
@@ -1175,9 +1193,9 @@ function drawScene(timestamp) {
 
     // 4. Uniform'lar ve temizlik
     gl.clearColor(
-        0.0 + lightningIntensity * 0.12,
-        0.035 + lightningIntensity * 0.18,
-        0.075 + lightningIntensity * 0.28,
+        0.0 + lightningIntensity * STATE.omen.lightningColor[0] * 0.2,
+        0.035 + lightningIntensity * STATE.omen.lightningColor[1] * 0.24,
+        0.075 + lightningIntensity * STATE.omen.lightningColor[2] * 0.3,
         1.0
     );
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -1319,6 +1337,7 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uTextureLoc, 0);
     gl.uniform1i(STATE.uUseTextureLoc, 1);
     gl.uniform1i(STATE.uUsePBRLoc, 0);
+    gl.uniform1i(STATE.uIsShipLoc, 1);
     gl.bindVertexArray(STATE.shipVAO);
     const modelMatrix = STATE.mat4.create();
     STATE.mat4.translate(modelMatrix, modelMatrix, [
@@ -1332,6 +1351,7 @@ function drawScene(timestamp) {
     STATE.mat4.rotateY(modelMatrix, modelMatrix, Math.PI);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
     gl.drawElements(gl.TRIANGLES, STATE.shipIndexCount, STATE.shipIndexType, 0);
+    gl.uniform1i(STATE.uIsShipLoc, 0);
     gl.uniform1i(STATE.uUseTextureLoc, 0);
 
     // === PILLARS ÇİZİMİ ===
@@ -1360,8 +1380,8 @@ function drawScene(timestamp) {
 
     // === CTHULHU ÇİZİMİ ===
     const cthulhuMatrix = STATE.mat4.create();
-    const CTHULHU_X = 0;
-    const CTHULHU_Z = -80;
+    const CTHULHU_X = STATE.omen.creatureOffset[0];
+    const CTHULHU_Z = -80 + STATE.omen.creatureOffset[1];
     const CTHULHU_INITIAL_Y = -75;
     STATE.mat4.translate(cthulhuMatrix, cthulhuMatrix, [CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y, CTHULHU_Z]);
     STATE.mat4.scale(cthulhuMatrix, cthulhuMatrix, [CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE]);

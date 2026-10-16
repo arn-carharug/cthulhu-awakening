@@ -23,6 +23,8 @@ async function validate() {
     vm.runInThisContext(effectsSource, { filename: 'environment-effects.js' });
     const weatherSource = await fs.readFile(path.join(root, 'js', 'weather-system.js'), 'utf8');
     vm.runInThisContext(weatherSource, { filename: 'weather-system.js' });
+    const omenSource = await fs.readFile(path.join(root, 'js', 'omen-system.js'), 'utf8');
+    vm.runInThisContext(omenSource, { filename: 'omen-system.js' });
     const audioSource = await fs.readFile(path.join(root, 'js', 'audio-system.js'), 'utf8');
     vm.runInThisContext(audioSource, { filename: 'audio-system.js' });
 
@@ -48,6 +50,22 @@ async function validate() {
     assert.ok(Number.isFinite(lightning.intensity), 'lightning intensity is invalid');
 
     const events = new SceneRuntime.EventBus();
+    const omenClasses = new Set();
+    const omenLabel = {
+        textContent: '',
+        classList: {
+            add: (name) => omenClasses.add(name),
+            remove: (name) => omenClasses.delete(name)
+        }
+    };
+    global.document = { getElementById: () => omenLabel };
+    const omens = new OmenSystem(events);
+    const firstOmen = omens.beginCycle(1);
+    const secondOmen = omens.beginCycle(2);
+    assert.notEqual(firstOmen.id, secondOmen.id, 'adjacent cycles should not repeat the same omen');
+    events.emit('awakening:started');
+    assert.equal(omenLabel.textContent, secondOmen.label, 'omen did not reveal during awakening');
+    assert.equal(omenClasses.has('revealed'), true, 'omen reveal style was not applied');
     let cueCount = 0;
     events.on('test:cue', () => { cueCount += 1; });
     const timeline = new SceneRuntime.SceneTimeline({
@@ -88,9 +106,10 @@ async function validate() {
     const requiredFiles = [
         'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js',
         'js/performance-monitor.js', 'js/debug-panel.js', 'js/environment-effects.js',
-        'js/weather-system.js', 'js/audio-system.js', 'js/ritual-presentation.js', 'js/game-loop.js',
+        'js/weather-system.js', 'js/omen-system.js', 'js/audio-system.js', 'js/ritual-presentation.js', 'js/game-loop.js',
         'shaders/vertex.glsl', 'shaders/fragment.glsl',
         'assets/textures/WeatheredWood2_S.jpg', 'assets/textures/OC1KI90.jpg',
+        'assets/textures/boat_wood_wet_v2.png', 'assets/textures/compass_brass_v2.png',
         'assets/textures/germany010.jpg', 'assets/textures/beautiful-photo-sea-waves.jpg',
         'assets/textures/Cthulhu_2k_Base_Color.png', 'assets/textures/Cthulhu_2k_AO.png',
         'assets/textures/Cthulhu_2k_Metallic.png', 'assets/textures/Cthulhu_2k_Roughness.png'

@@ -10,6 +10,7 @@
             this.cycleLabel = document.getElementById('cycle-label');
             this.countLabel = document.getElementById('objective-count');
             this.cycle = 1;
+            this.omenLabel = '--';
             this.bindEvents();
             this.start(false);
         }
@@ -52,6 +53,10 @@
             }
         }
 
+        setOmen(label) {
+            this.omenLabel = label || '--';
+        }
+
         finish() {
             const elapsedSeconds = Math.max(0, (performance.now() - this.startedAt) / 1000);
             const minutes = Math.floor(elapsedSeconds / 60);
@@ -63,6 +68,7 @@
             document.getElementById('stat-time').textContent = `${minutes}:${seconds}`;
             document.getElementById('stat-focus').textContent = `${focus}%`;
             document.getElementById('stat-streak').textContent = `${this.bestStreak.toFixed(1)}s`;
+            document.getElementById('stat-omen').textContent = this.omenLabel;
         }
 
         cycleName() {
