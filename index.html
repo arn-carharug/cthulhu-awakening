@@ -137,6 +137,15 @@
     <div id="bearing-beacon" aria-hidden="true">◇<small>R’lyeh</small></div>
     <div id="compass-readout" aria-label="Navigation"></div>
     <button id="inspect-compass" type="button">Inspect compass · E</button>
+    <div id="discovery-actions">
+      <button id="discover-journal" type="button" hidden>Inspect drifting journal · F</button>
+      <button id="discover-stone" type="button" hidden>Inspect tide-marked stone · F</button>
+      <button id="light-lantern" type="button" hidden>Raise lantern · L</button>
+    </div>
+    <section id="discovery-card" role="dialog" aria-modal="true" aria-labelledby="discovery-title" hidden>
+      <h1 id="discovery-title"></h1><p id="discovery-copy"></p>
+      <button id="discovery-close" type="button">Return to the sea</button>
+    </section>
     <p id="input-status" role="status" hidden></p>
     <section id="pause-screen" hidden aria-labelledby="pause-title" role="dialog" aria-modal="true">
       <h1 id="pause-title">The sea waits</h1>
@@ -268,6 +277,7 @@
     <script src="js/scene-controls.js"></script>
     <script src="js/comfort-settings.js"></script>
     <script src="js/navigation.js"></script>
+    <script src="js/discovery-system.js"></script>
     <script src="js/performance-monitor.js"></script>
     <script src="js/environment-effects.js"></script>
     <script src="js/weather-system.js"></script>

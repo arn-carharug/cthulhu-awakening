@@ -16,7 +16,7 @@ function createScene() {
         const handlers = new Map();
         const classes = new Set();
         return {
-            id, tagName, hidden: ['pause-screen', 'ending-card', 'witness-focus', 'input-status'].includes(id),
+            id, tagName, hidden: ['pause-screen', 'ending-card', 'witness-focus', 'input-status', 'discovery-card'].includes(id),
             textContent: '', value: '', dataset: {}, style: { setProperty() {} },
             classList: {
                 add: (name) => classes.add(name), remove: (name) => classes.delete(name),
@@ -74,7 +74,7 @@ function createScene() {
         addEventListener: (name, fn) => add(listeners, name, fn)
     });
     context.window = context;
-    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'performance-monitor',
+    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'discovery-system', 'performance-monitor',
         'audio-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
     }

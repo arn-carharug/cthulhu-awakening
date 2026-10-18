@@ -26,5 +26,20 @@
         return new Float32Array(vertices);
     }
 
-    global.EnvironmentEffects = { createDustField, createEyePoints };
+    function createDiscoveryMesh(sites) {
+        const vertices = [];
+        for (const site of sites) {
+            const [x, y, z] = site.position;
+            const half = site.id === 'journal' ? [0.8, 0.12, 0.55] : [0.55, 1.5, 0.55];
+            const corners = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+            for (const face of [[0,3,2,1],[4,5,6,7],[0,4,7,3],[1,2,6,5],[3,7,6,2],[0,1,5,4]]) {
+                for (const index of [face[0],face[1],face[2],face[0],face[2],face[3]]) {
+                    const corner = corners[index];
+                    pushVertex(vertices, [x + corner[0]*half[0], y + corner[1]*half[1], z + corner[2]*half[2]], [0,1,0], site.color, [0,0]);
+                }
+            }
+        }
+        return new Float32Array(vertices);
+    }
+    global.EnvironmentEffects = { createDustField, createEyePoints, createDiscoveryMesh };
 }(window));

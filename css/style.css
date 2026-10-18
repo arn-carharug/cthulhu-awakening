@@ -497,6 +497,10 @@ body.post-disabled #cinematic-overlay {
 }
 #compass-readout { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); color: #c5d4ce; z-index: 21; font: 12px/1.5 monospace; }
 #controls-guide { max-height: calc(100vh - 100px); overflow-y: auto; }
+#discovery-actions { position: fixed; right: 18px; bottom: 82px; z-index: 22; display: grid; gap: 6px; }
+#discovery-actions button, #discovery-close { background: #131817; color: #e7d7ad; border: 1px solid #b9c8c229; padding: 8px 12px; cursor: pointer; }
+#discovery-card { position: fixed; inset: 0; padding: 18vh max(5vw, calc((100vw - 640px) / 2)); background: #050912f5; color: #d3ddcf; z-index: 16000; font: 16px/1.8 Georgia, serif; }
+#discovery-card[hidden], #discovery-actions button[hidden] { display: none; }
 #bearing-beacon { position: fixed; top: 47%; color: #d8e9df; text-align: center; z-index: 5; pointer-events: none; }
 #bearing-beacon small { display: block; font-size: 10px; }
 #inspect-compass { position: fixed; bottom: 128px; left: 50%; transform: translateX(-50%); z-index: 21; padding: 7px 12px; color: #e7d7ad; background: #131817; border: 1px solid #b9c8c229; cursor: pointer; }

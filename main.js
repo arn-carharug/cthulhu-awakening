@@ -7,6 +7,7 @@ const sceneEvents = new window.SceneRuntime.EventBus();
 const sceneControls = new window.SceneControls();
 const comfortSettings = new window.ComfortSettings();
 const navigation = new window.VoyageNavigation();
+const discoveries = new window.DiscoverySystem();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
 const ritualCycle = new window.RitualCycle(sceneEvents);
@@ -206,7 +207,7 @@ function requestScenePointerLock() {
 }
 
 function setScenePaused(paused, showScreen = true) {
-    if (!paused && (document.hidden || !ritualPresentation.ending.hidden)) return;
+    if (!paused && (document.hidden || !ritualPresentation.ending.hidden || !document.getElementById('discovery-card').hidden)) return;
     STATE.paused = paused;
     sceneControls.clear();
     STATE.firstMouse = true;
@@ -220,11 +221,11 @@ function setScenePaused(paused, showScreen = true) {
 }
 
 window.addEventListener('blur', () => {
-    if (STATE.canvas && ritualPresentation.ending.hidden) setScenePaused(true);
+    if (STATE.canvas && ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden) setScenePaused(true);
     else sceneControls.clear();
 });
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden) setScenePaused(true, ritualPresentation.ending.hidden);
+    if (document.hidden) setScenePaused(true, ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden);
 });
 document.addEventListener('focusin', (event) => {
     if (isInterfaceTarget(event.target)) sceneControls.keys.clear();
@@ -270,8 +271,39 @@ function updateNavigation() {
     beacon.style.top = `${Math.max(8, Math.min(90, 47 + STATE.pitch * 1.5))}%`;
     document.getElementById('inspect-compass').hidden = STATE.awakeningStarted;
     document.getElementById('inspect-compass').textContent = STATE.compassInspectMode ? 'Lower compass · E / C' : 'Inspect compass · E';
+    const nearby = discoveries.nearby(STATE.shipPosition);
+    for (const site of discoveries.sites) document.getElementById(`discover-${site.id}`).hidden = STATE.awakeningStarted || !compassInspectedOnce || !nearby.includes(site);
+    document.getElementById('light-lantern').hidden = !STATE.awakeningStarted || STATE.torchLit;
     return sample;
 }
+
+function inspectDiscovery(id) {
+    if (STATE.paused || STATE.awakeningStarted || !compassInspectedOnce) return;
+    const site = discoveries.inspect(id, STATE.shipPosition);
+    if (!site) return;
+    document.getElementById('discovery-title').textContent = site.title;
+    document.getElementById('discovery-copy').textContent = site.text;
+    document.getElementById('discovery-card').hidden = false;
+    setScenePaused(true, false);
+    document.getElementById('discovery-close').focus();
+    sceneEvents.emit('discovery:found', { id });
+}
+for (const site of discoveries.sites) document.getElementById(`discover-${site.id}`).addEventListener('click', () => inspectDiscovery(site.id));
+document.getElementById('discovery-close').addEventListener('click', () => {
+    document.getElementById('discovery-card').hidden = true;
+    setScenePaused(document.hidden);
+    STATE.canvas?.focus();
+});
+
+function lightLantern() {
+    if (STATE.paused || !STATE.awakeningStarted || STATE.torchLit) return;
+    STATE.torchClicked = true;
+    STATE.torchLit = true;
+    STATE.torchHovered = false;
+    STATE.torchLightIntensity = torchConfig.defaultIntensity;
+    sceneEvents.emit('interaction:torch');
+}
+document.getElementById('light-lantern').addEventListener('click', () => { lightLantern(); STATE.canvas?.focus(); });
 for (const [id, key] of Object.entries({ 'comfort-system': 'followSystem', 'comfort-boat': 'reduceBoat',
     'comfort-shake': 'reduceShake', 'comfort-lightning': 'reduceLightning' })) {
     const input = document.getElementById(id);
@@ -527,7 +559,8 @@ window.addEventListener('wheel', (e) => {
 window.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     const modal = !document.getElementById('pause-screen').hidden
-        ? document.getElementById('pause-screen') : !ritualPresentation.ending.hidden ? ritualPresentation.ending : null;
+        ? document.getElementById('pause-screen') : !ritualPresentation.ending.hidden ? ritualPresentation.ending
+            : !document.getElementById('discovery-card').hidden ? document.getElementById('discovery-card') : null;
     if (modal && key === 'tab') {
         const buttons = [...modal.querySelectorAll('button')];
         const index = buttons.indexOf(document.activeElement);
@@ -548,6 +581,12 @@ window.addEventListener("keydown", (e) => {
     if (STATE.paused) return;
 
     if (key === 'e' && !e.repeat) { toggleCompassInspection(); return; }
+    if (key === 'l' && !e.repeat) { lightLantern(); return; }
+    if (key === 'f' && !e.repeat) {
+        const site = discoveries.nearby(STATE.shipPosition)[0];
+        if (site) inspectDiscovery(site.id);
+        return;
+    }
     if (!STATE.compassInspectMode && key.startsWith('arrow')) {
         rotateCamera(key === 'arrowleft' ? -4 : key === 'arrowright' ? 4 : 0,
             key === 'arrowup' ? 3 : key === 'arrowdown' ? -3 : 0);
@@ -930,6 +969,10 @@ async function main() {
     STATE.eyeVAO = eyes.vao;
     STATE.eyeVBO = eyes.buffer;
     STATE.eyeCount = eyes.count;
+    const discoveryMesh = createEffectsVAO(window.EnvironmentEffects.createDiscoveryMesh(discoveries.sites));
+    STATE.discoveryVAO = discoveryMesh.vao;
+    STATE.discoveryVBO = discoveryMesh.buffer;
+    STATE.discoveryCount = discoveryMesh.count;
 
     // Canvas eventleri vs. aynı kalacak...
     STATE.canvas.addEventListener("click", (event) => {
@@ -970,11 +1013,7 @@ async function main() {
             if (!interactionHandled && STATE.awakeningStarted && !STATE.torchLit && !STATE.torchClicked) {
                 const torchPos = getTorchPosition();
                 if (STATE.torchHovered || rayIntersectsSphere(ray.origin, ray.direction, torchPos, 0.55)) {
-                    STATE.torchClicked = true;
-                    STATE.torchLit = true;
-                    STATE.torchHovered = false;
-                    STATE.torchLightIntensity = torchConfig.defaultIntensity;
-                    sceneEvents.emit('interaction:torch');
+                    lightLantern();
                     interactionHandled = true;
                 }
             }
@@ -1057,6 +1096,8 @@ function isLookingAtRlyeh() {
 
 function resetScene(advanceCycle = false) {
     sceneControls.clear();
+    discoveries.reset();
+    document.getElementById('discovery-card').hidden = true;
     STATE.awakeningStarted = false;
     STATE.cthulhuRiseY = 0;
     STATE.torchLit = false;
@@ -1205,8 +1246,8 @@ function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
     );
     STATE.vec3.normalize(toHead, toHead);
 
-    const alignment = STATE.vec3.dot(STATE.cameraFront, toHead);
-    const locked = STATE.torchLit && alignment > 0.965;
+    const locked = STATE.torchLit && STATE.effects.lighting && STATE.torchLightIntensity > 0
+        && window.DiscoverySystem.aligned(STATE.cameraFront, toHead);
     if (locked) {
         STATE.witness.focus = Math.min(1, STATE.witness.focus + deltaSeconds / 4);
     } else {
@@ -1513,6 +1554,11 @@ function drawScene(timestamp) {
     gl.drawElements(gl.TRIANGLES, STATE.shipIndexCount, STATE.shipIndexType, 0);
     gl.uniform1i(STATE.uIsShipLoc, 0);
     gl.uniform1i(STATE.uUseTextureLoc, 0);
+
+    // Nearby physical discoveries use the existing material program.
+    gl.bindVertexArray(STATE.discoveryVAO);
+    gl.uniformMatrix4fv(STATE.uModelLoc, false, STATE.mat4.create());
+    gl.drawArrays(gl.TRIANGLES, 0, STATE.discoveryCount);
 
     // === PILLARS ÇİZİMİ ===
     gl.activeTexture(gl.TEXTURE1);

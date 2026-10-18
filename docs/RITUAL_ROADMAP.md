@@ -75,7 +75,9 @@ Uygulama: [Ritüel X raporu](rituals/RITUAL_10_REPORT.md).
 
 ## Ritüel XI — Suyun Getirdikleri
 
-**Durum:** Planlandı · **Öncelik:** P1 · **Bağımlılık:** X
+**Durum:** Doğrulama bekliyor · **Öncelik:** P1 · **Bağımlılık:** X
+
+Uygulama: [Ritüel XI raporu](rituals/RITUAL_11_REPORT.md).
 
 **Amaç:** Uyanış öncesine kısa, somut keşif etkileşimleri eklemek.
 
