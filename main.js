@@ -1389,7 +1389,8 @@ function advanceScene(timestamp) {
         sceneControls.keys.clear();
     } else {
         const movement = sceneControls.movement(STATE.cameraFront, STATE.cameraSpeed, deltaSeconds);
-        STATE.vec3.add(STATE.shipPosition, STATE.shipPosition, movement);
+        const nextPosition = discoveries.moveShip(STATE.shipPosition, movement);
+        for (let axis = 0; axis < 3; axis++) STATE.shipPosition[axis] = nextPosition[axis];
     }
     return deltaSeconds;
 }

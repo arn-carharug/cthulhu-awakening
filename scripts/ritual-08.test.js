@@ -117,6 +117,21 @@ test('five-second movement is equal at 30, 60, and 120 FPS; diagonals are normal
     }
 });
 
+test('held movement stops the hull at the stone at different frame rates', () => {
+    for (const fps of [30, 60, 120]) {
+        const scene = createScene();
+        scene.inspect();
+        scene.STATE.shipPosition = [-9, 0, 35];
+        scene.key('w');
+        scene.advanceScene(0);
+        for (let frame = 1; frame <= fps * 4; frame++) scene.advanceScene(frame * 1000 / fps);
+        assert.ok(scene.STATE.shipPosition[2] > 22.94 && scene.STATE.shipPosition[2] < 22.96);
+        scene.keyup('w'); scene.key('s');
+        scene.advanceScene(4100);
+        assert.ok(scene.STATE.shipPosition[2] > 23, 'reverse movement releases contact');
+    }
+});
+
 test('key release, opposite inputs, UI focus, and compass/awakening gates stop movement', () => {
     const scene = createScene();
     scene.key('w');

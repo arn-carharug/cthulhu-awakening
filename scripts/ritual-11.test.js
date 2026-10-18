@@ -32,3 +32,16 @@ test('lantern alignment normalizes vectors and rejects zero or backwards aims', 
     assert.equal(aligned([0,0,0],[0,0,-1]), false);
     assert.equal(aligned([0,0,-1],[30,0,-100]), false);
 });
+test('stone blocks swept hull movement, allows sliding and escaping overlap', () => {
+    const system = new context.DiscoverySystem();
+    const clearance = p => Math.hypot((p[0] + 9) / 3.25, (p[2] - 17) / 5.95);
+    const stopped = system.moveShip([-9, 0, 35], [0, 0, -50]);
+    assert.ok(stopped[2] > 22.94 && stopped[2] < 22.96, 'large steps cannot tunnel through stone');
+    assert.ok(clearance(stopped) >= 1);
+    const slid = system.moveShip([-11, 0, 28], [0, 0, -9]);
+    assert.ok(slid[0] < -11 && slid[2] < 28, 'oblique contact slides along the edge');
+    assert.ok(clearance(slid) >= 1);
+    assert.ok(system.moveShip(stopped, [0, 0, 2])[2] > stopped[2]);
+    assert.ok(clearance(system.moveShip([-9, 0, 17], [0, 0, 0])) >= 1);
+    assert.deepEqual([...system.moveShip([8, 0, 45], [0, 0, -4])], [8, 0, 41], 'floating journal does not block the boat');
+});
