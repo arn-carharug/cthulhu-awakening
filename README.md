@@ -104,11 +104,13 @@ assets/textures/           Textures used by the active scene
 
 ## Ritual roadmap
 
-Development milestones in this project are called **rituals**. Ritual VIII is implemented and awaiting the remaining browser checks; Rituals IX–XV are planned.
+Development milestones in this project are called **rituals**. Rituals VIII–IX are implemented with remaining browser checks documented; Rituals X–XV are planned.
 
 See the [ritual roadmap](docs/RITUAL_ROADMAP.md) for scope, dependencies, and completion criteria, the [Ritual VIII report](docs/rituals/RITUAL_08_REPORT.md) for validation and measurements, and the [research notes](docs/RESEARCH_AND_ROADMAP.md) for references and findings.
 
-Ritual VIII adds frame-rate-independent movement, a pause dialog, focus-loss/hidden-tab pausing, safe final-card mouse release, and consistent active scene time. Resume is deliberate after returning to the page. R retries the same cycle and omen; **Witness it again** starts a new cycle. The F2 panel's **Capture measurements** button records browser, resolution, load time, and raw frame timings, including p95. The sample covers up to the most recent 600 active frames; FPS and mean time describe the latest half-second reporting window. Reduced 3D motion and omen shuffle changes belong to Ritual IX.
+Ritual VIII adds frame-rate-independent movement, a pause dialog, focus-loss/hidden-tab pausing, safe final-card mouse release, and consistent active scene time. Resume is deliberate after returning to the page. R retries the same cycle and omen; **Witness it again** starts a new cycle. The F2 panel's **Capture measurements** button records browser, resolution, load time, and raw frame timings, including p95. The sample covers up to the most recent 600 active frames; FPS and mean time describe the latest half-second reporting window.
+
+Ritual IX adds **Comfort & replay** settings for system motion preference, boat motion, camera shake, and reduced lightning. The saved replay seed reproduces a sequence of shuffled four-omen sets with no adjacent repeats. See the [Ritual IX report](docs/rituals/RITUAL_09_REPORT.md).
 
 ## Deployment
 
@@ -123,6 +125,6 @@ node --check main.js
 node --check js/asset-loader.js
 node --check scripts/serve.js
 node scripts/validate.js
-node --test scripts/ritual-08.test.js
+node --test scripts/ritual-*.test.js
 node scripts/serve.js
 ```

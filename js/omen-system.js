@@ -7,17 +7,36 @@
     ]);
 
     class OmenSystem {
-        constructor(events) {
+        constructor(events, seed = 20261018) {
             this.label = document.getElementById('omen-label');
             this.profile = PROFILES[0];
+            this.setSeed(seed);
             events.on('awakening:started', () => this.reveal());
         }
 
+        setSeed(seed) {
+            this.seed = seed >>> 0;
+            this.randomState = this.seed;
+            this.sequence = [];
+        }
+
+        random() {
+            this.randomState = (Math.imul(this.randomState, 1664525) + 1013904223) >>> 0;
+            return this.randomState / 4294967296;
+        }
+
         beginCycle(cycle) {
-            let seed = Math.imul(cycle + 17, 2654435761) >>> 0;
-            seed ^= seed >>> 16;
-            seed = Math.imul(seed, 2246822519) >>> 0;
-            this.profile = PROFILES[seed % PROFILES.length];
+            if (!Number.isSafeInteger(cycle) || cycle < 1) throw new Error('Cycle must be a positive integer.');
+            while (this.sequence.length < cycle) {
+                const block = [...PROFILES];
+                for (let index = block.length - 1; index > 0; index--) {
+                    const other = Math.floor(this.random() * (index + 1));
+                    [block[index], block[other]] = [block[other], block[index]];
+                }
+                if (this.sequence.at(-1)?.id === block[0].id) [block[0], block[1]] = [block[1], block[0]];
+                this.sequence.push(...block);
+            }
+            this.profile = this.sequence[cycle - 1];
             this.label.textContent = 'Omen veiled';
             this.label.classList.remove('revealed');
             return this.profile;

@@ -5,10 +5,11 @@ const {
 } = window.GameConfig;
 const sceneEvents = new window.SceneRuntime.EventBus();
 const sceneControls = new window.SceneControls();
+const comfortSettings = new window.ComfortSettings();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
 const ritualCycle = new window.RitualCycle(sceneEvents);
-const omenSystem = new window.OmenSystem(sceneEvents);
+const omenSystem = new window.OmenSystem(sceneEvents, comfortSettings.values.seed);
 const initialOmen = omenSystem.beginCycle(ritualCycle.cycle);
 ritualCycle.setOmen(initialOmen.label);
 const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
@@ -177,7 +178,7 @@ document.getElementById('pause-resume').addEventListener('click', () => {
 sceneEvents.on('ending:shown', () => setScenePaused(true, false));
 
 function isInterfaceTarget(target) {
-    return Boolean(target?.closest?.('button, input, select, textarea, a, [contenteditable="true"], [role="dialog"]'));
+    return Boolean(target?.closest?.('button, input, select, textarea, summary, a, [contenteditable="true"], [role="dialog"]'));
 }
 
 function releaseScenePointerLock() {
@@ -229,6 +230,29 @@ document.addEventListener('focusin', (event) => {
 });
 window.addEventListener('keyup', (event) => sceneControls.keys.delete(event.key.toLowerCase()));
 document.addEventListener('pointerlockerror', reportPointerLockError);
+for (const [id, key] of Object.entries({ 'comfort-system': 'followSystem', 'comfort-boat': 'reduceBoat',
+    'comfort-shake': 'reduceShake', 'comfort-lightning': 'reduceLightning' })) {
+    const input = document.getElementById(id);
+    input.checked = comfortSettings.values[key];
+    input.addEventListener('change', () => comfortSettings.set(key, input.checked));
+}
+const seedInput = document.getElementById('omen-seed');
+seedInput.value = String(comfortSettings.values.seed);
+document.getElementById('omen-seed-apply').addEventListener('click', () => {
+    if (seedInput.value.trim() === '' || !comfortSettings.set('seed', Number(seedInput.value))) {
+        seedInput.setCustomValidity('Enter a whole number between 0 and 4294967295.');
+        seedInput.reportValidity();
+        return;
+    }
+    seedInput.setCustomValidity('');
+    omenSystem.setSeed(comfortSettings.values.seed);
+    document.getElementById('comfort-controls').open = false;
+    resetScene();
+});
+document.getElementById('comfort-controls').addEventListener('toggle', (event) => {
+    sceneControls.keys.clear();
+    if (event.target.open) releaseScenePointerLock();
+});
 // Add right after STATE:
 let pillarsRiseY = 0;
 // Water Plane (2D Quad) - Position, Normal, Color, UV
@@ -295,7 +319,7 @@ function toRadians(degrees) {
 }
 
 function updateBoatMotion() {
-    if (!STATE.effects.boatMotion || !STATE.effects.water) {
+    if (!STATE.effects.boatMotion || !STATE.effects.water || !comfortSettings.boatMotionEnabled) {
         STATE.boatMotion = { bob: 0, roll: 0, pitch: 0 };
         return;
     }
@@ -312,7 +336,7 @@ function getCameraPosition() {
     const cameraPosition = STATE.vec3.clone(STATE.shipPosition);
     cameraPosition[1] += 1.2 + STATE.boatMotion.bob * 0.62;
     cameraPosition[2] += 0.3;
-    if (STATE.cinematic.shake > 0.001) {
+    if (comfortSettings.cameraShakeEnabled && STATE.cinematic.shake > 0.001) {
         const shake = STATE.cinematic.shake;
         cameraPosition[0] += Math.sin(STATE.elapsedTime * 31.0) * shake * 0.09;
         cameraPosition[1] += Math.sin(STATE.elapsedTime * 43.0 + 0.7) * shake * 0.055;
@@ -361,7 +385,7 @@ function getTorchPosition() {
 
 // Mouse/keyboard events: camera and torch hover
 window.addEventListener("mousemove", (event) => {
-    if (STATE.paused || document.pointerLockElement !== STATE.canvas) return;
+    if (STATE.paused || document.getElementById('comfort-controls').open || document.pointerLockElement !== STATE.canvas) return;
 
     // Skip first mouse move after pointer lock (avoid camera jump)
     if (STATE.firstMouse) {
@@ -1175,7 +1199,7 @@ function advanceScene(timestamp) {
     STATE.performanceMonitor?.update(rawSeconds);
     ritualCycle.update(deltaSeconds);
     ritualPresentation.update(deltaSeconds);
-    if (!compassInspectedOnce || STATE.awakeningStarted || STATE.compassInspectMode || isInterfaceTarget(document.activeElement)) {
+    if (!compassInspectedOnce || STATE.awakeningStarted || STATE.compassInspectMode || document.getElementById('comfort-controls').open || isInterfaceTarget(document.activeElement)) {
         sceneControls.keys.clear();
     } else {
         const movement = sceneControls.movement(STATE.cameraFront, STATE.cameraSpeed, deltaSeconds);
@@ -1189,6 +1213,7 @@ window.getSceneDiagnostics = () => ({
     viewport: { width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio },
     renderSize: { width: STATE.canvas?.width, height: STATE.canvas?.height },
     quality: STATE.quality,
+    omenSeed: comfortSettings.values.seed,
     initialLoadMs: STATE.initialLoadMs ?? null,
     paused: STATE.paused,
     performance: STATE.performanceMonitor?.snapshot() ?? null
@@ -1264,7 +1289,8 @@ function drawScene(timestamp) {
     gl.uniform1f(STATE.uWaveHeightLoc, STATE.effects.water ? oceanConfig.waveHeight * STATE.omen.waveHeight * (1 + surgeProgress * 1.05) : 0);
     gl.uniform1f(STATE.uWaveSpeedLoc, oceanConfig.waveSpeed * STATE.omen.waveSpeed);
     gl.uniform1f(STATE.uFoamThresholdLoc, oceanConfig.foamThreshold);
-    const lightningIntensity = STATE.effects.lightning ? STATE.lightning.intensity * STATE.omen.lightningGain : 0;
+    const lightningIntensity = STATE.effects.lightning
+        ? comfortSettings.lightningIntensity(STATE.lightning.intensity * STATE.omen.lightningGain) : 0;
     gl.uniform1f(STATE.uLightningIntensityLoc, lightningIntensity);
     gl.uniform3fv(STATE.uLightningColorLoc, STATE.omen.lightningColor);
 

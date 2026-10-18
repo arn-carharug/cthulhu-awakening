@@ -2,7 +2,7 @@
 
 18 Ekim 2026 · Başlangıç sürümü: `de31a8e` (`ritual_7`)
 
-Bu projede geliştirme aşamalarının adı **ritüel**. Mevcut Ritual I–VII'nin ardından VIII–XV planlandı. VIII'in kodu uygulandı; kalan tarayıcı doğrulaması açık. IX–XV'e başlanmadı.
+Bu projede geliştirme aşamalarının adı **ritüel**. VIII ve IX uygulandı; kalan tarayıcı doğrulamaları açık. X–XV'e başlanmadı.
 
 Araştırma, emsaller ve mevcut kod bulguları: [Araştırma ve geliştirme önerisi](RESEARCH_AND_ROADMAP.md).
 
@@ -41,7 +41,9 @@ Uygulama, testler, başlangıç ölçümü ve kalan kontroller: [Ritüel VIII ra
 
 ## Ritüel IX — Sakin Bakış
 
-**Durum:** Planlandı · **Öncelik:** P0 · **Bağımlılık:** VIII
+**Durum:** Doğrulama bekliyor · **Öncelik:** P0 · **Bağımlılık:** VIII
+
+Uygulama ve kanıt: [Ritüel IX raporu](rituals/RITUAL_09_REPORT.md).
 
 **Amaç:** Erişilebilir, tekrar üretilebilir bir deneyim temeli oluşturmak.
 
@@ -148,6 +150,6 @@ Uygulama, testler, başlangıç ölçümü ve kalan kontroller: [Ritüel VIII ra
 
 ## Başlangıç ve ertelenen kapsam
 
-Aktif ritüel **VIII — Sağlam Güverte**; kalan gerçek tarayıcı kontrolleri raporda listeli. VIII kapandıktan sonra sıradaki ritüel **IX — Sakin Bakış**.
+VIII ve IX'un kodları ayrı `main` commitleriyle kaydedildi; kalan gerçek tarayıcı kontrolleri raporlarında açık. Kullanıcının sırayla uygulama yönlendirmesi kapsamında sıradaki geliştirme **X — Kaybolan Kuzey**.
 
 Açık dünya, balıkçılık ekonomisi, savaş, crafting, çok oyunculu, motor değişimi ve tam mobil kontrol plan dışında. Önce kısa deneyimin oynanabilirliği ve atmosferi doğrulanacak.

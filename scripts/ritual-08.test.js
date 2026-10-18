@@ -62,7 +62,7 @@ function createScene() {
     };
     document.activeElement = get('glCanvas');
     const vector = {
-        create: () => [0, 0, 0], fromValues: (...v) => v,
+        create: () => [0, 0, 0], fromValues: (...v) => v, clone: (v) => [...v],
         add(out, a, b) { for (let i = 0; i < 3; i++) out[i] = a[i] + b[i]; return out; }
     };
     const context = vm.createContext({
@@ -74,7 +74,7 @@ function createScene() {
         addEventListener: (name, fn) => add(listeners, name, fn)
     });
     context.window = context;
-    for (const file of ['config', 'timeline', 'scene-controls', 'performance-monitor',
+    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'performance-monitor',
         'audio-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
     }
@@ -85,6 +85,7 @@ function createScene() {
         STATE.performanceMonitor = new PerformanceMonitor(null);
         globalThis.scene = { STATE, sceneControls, ritualCycle, ritualPresentation, ritualAudio,
             sceneEvents, resetScene, advanceScene, setScenePaused, requestScenePointerLock,
+            comfortSettings, updateBoatMotion, getCameraPosition,
             inspect: () => { compassInspectedOnce = true; },
             uninspect: () => { compassInspectedOnce = false; } };
     `, context);
@@ -276,4 +277,23 @@ test('audio reset and pause stop scheduled one-shot sounds and cancel rumble env
     assert.equal(calls.at(-1), 0, 'volume cannot unmute a paused scene');
     audio.setPaused(false);
     assert.equal(calls.at(-1), audio.outputGain());
+});
+
+test('comfort settings actually suppress 3D boat motion and camera shake', () => {
+    const scene = createScene();
+    scene.STATE.elapsedTime = 2;
+    scene.STATE.cinematic.shake = 1;
+    scene.updateBoatMotion();
+    assert.notEqual(scene.STATE.boatMotion.bob, 0);
+    const movingCamera = scene.getCameraPosition();
+    scene.comfortSettings.set('reduceBoat', true);
+    scene.comfortSettings.set('reduceShake', true);
+    scene.updateBoatMotion();
+    assert.equal(scene.STATE.boatMotion.bob, 0);
+    assert.equal(scene.STATE.boatMotion.roll, 0);
+    assert.equal(scene.STATE.boatMotion.pitch, 0);
+    const stillCamera = scene.getCameraPosition();
+    assert.equal(stillCamera[0], 10);
+    assert.equal(stillCamera[1], 1.2);
+    assert.notEqual(movingCamera[0], stillCamera[0]);
 });
