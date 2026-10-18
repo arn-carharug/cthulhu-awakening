@@ -615,6 +615,7 @@ window.addEventListener('wheel', (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
+    if (!STATE.canvas) return;
     const key = e.key.toLowerCase();
     const modal = !document.getElementById('pause-screen').hidden
         ? document.getElementById('pause-screen') : !ritualPresentation.ending.hidden ? ritualPresentation.ending
@@ -708,10 +709,38 @@ document.addEventListener("pointerlockchange", () => {
 
 window.addEventListener('scene:reset', () => resetScene());
 window.addEventListener('scene:awaken', startAwakening);
-window.addEventListener('scene:quality', (event) => {
+let textureRequest = 0;
+async function refreshTextures(quality) {
+    const request = ++textureRequest;
+    const entries = Object.entries(window.TextureCatalog.entries(quality));
+    const results = await Promise.allSettled(entries.map(([,url]) => loadTexture(STATE.gl, url)));
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed || request !== textureRequest || STATE.gl.isContextLost()) {
+        for (const result of results) if (result.status === 'fulfilled') STATE.gl.deleteTexture(result.value);
+        if (failed && request === textureRequest) throw failed.reason;
+        return false;
+    }
+    for (let index = 0; index < entries.length; index++) {
+        const key = entries[index][0]; const previous = STATE[key]; STATE[key] = results[index].value;
+        if (previous) STATE.gl.deleteTexture(previous);
+    }
+    return true;
+}
+window.addEventListener('scene:quality', async (event) => {
     const quality = event.detail.quality;
     if (!qualityPresets[quality]) return;
+    const previous = STATE.quality;
     STATE.quality = quality;
+    if (STATE.gl && ((previous === 'low') !== (quality === 'low'))) {
+        try { if (!await refreshTextures(quality)) return; }
+        catch (error) {
+            if (STATE.quality !== quality) return;
+            STATE.quality = previous; document.getElementById('debug-quality').value = previous;
+            reportPointerLockError(); document.getElementById('input-status').textContent = `Quality change failed: ${error.message}`;
+            return;
+        }
+    }
+    if (STATE.quality !== quality) return;
     if (STATE.gl) {
         rebuildWaterMesh(qualityPresets[quality].waterSegments);
         rebuildAtmosphere(qualityPresets[quality].particles);
@@ -734,6 +763,10 @@ window.addEventListener('scene:effect', (event) => {
 // =====================
 async function main() {
     STATE.canvas = document.getElementById("glCanvas");
+    STATE.canvas.addEventListener('webglcontextlost', (event) => {
+        event.preventDefault(); textureRequest += 1; setScenePaused(true, false);
+        showFatalError(new Error('The graphics context was lost. Reload to rebuild the scene.'));
+    });
     STATE.gl = STATE.canvas.getContext("webgl2");
     if (!STATE.gl) throw new Error("WebGL 2 is not supported by this browser or GPU.");
     resizeCanvas();
@@ -802,19 +835,19 @@ async function main() {
         pillarsTexture, pillarsModel, cthulhuTexture, cthulhuAOTex,
         cthulhuMetallicTex, cthulhuRoughnessTex, cthulhuModel, waterTexture
     ] = await Promise.all([
-        loadTexture(STATE.gl, 'assets/textures/boat_wood_wet_v2.png'),
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'boat_wood_wet_v2.png')),
         loadOBJWithMTL('assets/models/woodBoat.obj', 'assets/models/woodBoat.mtl', true),
         loadOBJWithMTL('assets/models/torch.obj', 'assets/models/torch.mtl', false),
-        loadTexture(STATE.gl, 'assets/textures/compass_brass_v2.png'),
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'compass_brass_v2.png')),
         loadOBJWithMTL('assets/models/compass.obj', 'assets/models/compass.mtl', true),
-        loadTexture(STATE.gl, 'assets/textures/germany010.jpg'),
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'germany010.jpg')),
         loadOBJWithMTL('assets/models/pillars.obj', 'assets/models/pillars.mtl', true),
-        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Base_Color.png'),
-        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_AO.png'),
-        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Metallic.png'),
-        loadTexture(STATE.gl, 'assets/textures/Cthulhu_2k_Roughness.png'),
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'Cthulhu_2k_Base_Color.png')),
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'Cthulhu_2k_AO.png')),
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'Cthulhu_2k_Metallic.png')),
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'Cthulhu_2k_Roughness.png')),
         loadOBJWithMTL('assets/models/Horror_low_subd.obj', null, true),
-        loadTexture(STATE.gl, 'assets/textures/beautiful-photo-sea-waves.jpg')
+        loadTexture(STATE.gl, window.TextureCatalog.url(STATE.quality, 'beautiful-photo-sea-waves.jpg'))
     ]);
     Object.assign(STATE, {
         shipTexture, compassTexture, pillarsTexture, cthulhuTexture,
@@ -1355,7 +1388,11 @@ window.getSceneDiagnostics = () => ({
     omenSeed: comfortSettings.values.seed,
     initialLoadMs: STATE.initialLoadMs ?? null,
     paused: STATE.paused,
-    performance: STATE.performanceMonitor?.snapshot() ?? null
+    performance: STATE.performanceMonitor?.snapshot() ?? null,
+    resources: (performance.getEntriesByType?.('resource') || [])
+        .filter((entry) => entry.name.includes('/optimized/')).map((entry) => ({
+            file: entry.name.split('/').slice(-2).join('/'), transferBytes: entry.transferSize, decodedBytes: entry.decodedBodySize
+        }))
 });
 
 function drawScene(timestamp) {
@@ -1761,10 +1798,27 @@ function rayIntersectsSphere(rayOrigin, rayDir, sphereCenter, radius) {
     const d2 = STATE.vec3.dot(L, L) - tca * tca;
     return d2 <= radius * radius;
 }
-main().catch((error) => {
+function showFatalError(error) {
     console.error(error);
+    document.getElementById('launch-screen').hidden = true;
     document.getElementById("loading-screen").hidden = true;
     const panel = document.getElementById("fatal-error");
     panel.hidden = false;
-    panel.textContent = `The scene could not be started.\n${error.message}`;
+    document.getElementById('fatal-message').textContent = `The scene could not be started.\n${error.message}`;
+}
+
+// BOOTSTRAP
+let starting = false;
+document.getElementById('start-scene').addEventListener('click', () => {
+    if (starting) return;
+    starting = true;
+    STATE.paused = false; sceneControls.clear(); ritualAudio.setPaused(false);
+    document.getElementById('pause-screen').hidden = true;
+    const quality = document.getElementById('launch-quality').value;
+    STATE.quality = qualityPresets[quality] ? quality : defaultQuality;
+    document.getElementById('debug-quality').value = STATE.quality;
+    document.getElementById('launch-screen').hidden = true;
+    document.getElementById('loading-screen').hidden = false;
+    STATE.loadStartedAt = performance.now();
+    main().then(() => { STATE.initialLoadMs = performance.now() - STATE.loadStartedAt; STATE.canvas.focus(); }).catch(showFatalError);
 });

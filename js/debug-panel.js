@@ -25,6 +25,7 @@
     });
     global.addEventListener('keydown', (event) => {
         if (event.key === 'F2' && !event.repeat) {
+            if (!document.getElementById('launch-screen').hidden || !document.getElementById('loading-screen').hidden) return;
             if (!document.getElementById('pause-screen').hidden || !document.getElementById('ending-card').hidden) return;
             panel.hidden = !panel.hidden;
             if (!panel.hidden) {

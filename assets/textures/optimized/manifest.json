@@ -1,0 +1,127 @@
+{
+  "sourceBytes": 36334252,
+  "variants": {
+    "high": {
+      "bytes": 5619408,
+      "files": [
+        {
+          "source": "boat_wood_wet_v2.png",
+          "file": "boat_wood_wet_v2.webp",
+          "width": 1536,
+          "height": 1024,
+          "bytes": 642082
+        },
+        {
+          "source": "compass_brass_v2.png",
+          "file": "compass_brass_v2.webp",
+          "width": 1254,
+          "height": 1254,
+          "bytes": 742718
+        },
+        {
+          "source": "germany010.jpg",
+          "file": "germany010.webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 455214
+        },
+        {
+          "source": "Cthulhu_2k_Base_Color.png",
+          "file": "Cthulhu_2k_Base_Color.webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 911066
+        },
+        {
+          "source": "Cthulhu_2k_AO.png",
+          "file": "Cthulhu_2k_AO.webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 220
+        },
+        {
+          "source": "Cthulhu_2k_Metallic.png",
+          "file": "Cthulhu_2k_Metallic.webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 701770
+        },
+        {
+          "source": "Cthulhu_2k_Roughness.png",
+          "file": "Cthulhu_2k_Roughness.webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 1809720
+        },
+        {
+          "source": "beautiful-photo-sea-waves.jpg",
+          "file": "beautiful-photo-sea-waves.webp",
+          "width": 2048,
+          "height": 1367,
+          "bytes": 356618
+        }
+      ]
+    },
+    "low": {
+      "bytes": 534570,
+      "files": [
+        {
+          "source": "boat_wood_wet_v2.png",
+          "file": "boat_wood_wet_v2.webp",
+          "width": 512,
+          "height": 341,
+          "bytes": 55688
+        },
+        {
+          "source": "compass_brass_v2.png",
+          "file": "compass_brass_v2.webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 85058
+        },
+        {
+          "source": "germany010.jpg",
+          "file": "germany010.webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 56138
+        },
+        {
+          "source": "Cthulhu_2k_Base_Color.png",
+          "file": "Cthulhu_2k_Base_Color.webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 42728
+        },
+        {
+          "source": "Cthulhu_2k_AO.png",
+          "file": "Cthulhu_2k_AO.webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 54
+        },
+        {
+          "source": "Cthulhu_2k_Metallic.png",
+          "file": "Cthulhu_2k_Metallic.webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 102534
+        },
+        {
+          "source": "Cthulhu_2k_Roughness.png",
+          "file": "Cthulhu_2k_Roughness.webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 168410
+        },
+        {
+          "source": "beautiful-photo-sea-waves.jpg",
+          "file": "beautiful-photo-sea-waves.webp",
+          "width": 512,
+          "height": 342,
+          "bytes": 23960
+        }
+      ]
+    }
+  }
+}

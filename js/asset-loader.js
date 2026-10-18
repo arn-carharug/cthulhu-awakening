@@ -93,7 +93,7 @@
                 gl.generateMipmap(gl.TEXTURE_2D);
                 resolve(texture);
             };
-            image.onerror = () => reject(new Error(`${url} texture could not be loaded`));
+            image.onerror = () => { gl.deleteTexture(texture); reject(new Error(`${url} texture could not be loaded`)); };
             image.src = url;
         });
     }

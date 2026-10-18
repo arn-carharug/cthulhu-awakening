@@ -1,0 +1,22 @@
+{
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+  "viewport": {
+    "width": 1280,
+    "height": 720,
+    "dpr": 1.0000000149011612
+  },
+  "renderSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "quality": "high",
+  "omenSeed": 20261018,
+  "initialLoadMs": 1384.7999999821186,
+  "paused": false,
+  "performance": {
+    "sampleCount": 600,
+    "fps": 134.29349941611437,
+    "meanFrameMs": 7.44637681159425,
+    "p95FrameMs": 7.399999999994179
+  }
+}

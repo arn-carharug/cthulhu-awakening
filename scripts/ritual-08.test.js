@@ -24,6 +24,7 @@ function createScene() {
                 toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); }
             },
             addEventListener: (name, fn) => handlers.set(name, fn),
+            dispatch(name, event) { handlers.get(name)?.(event); },
             click() { handlers.get('click')?.({ target: this, stopPropagation() {} }); },
             closest() { return ['BUTTON', 'INPUT', 'SELECT'].includes(this.tagName) ? this : null; },
             setAttribute() {},
@@ -80,13 +81,14 @@ function createScene() {
     }
     const source = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
     // Omit automatic GPU startup; all production handlers/functions remain intact.
-    vm.runInContext(source.slice(0, source.lastIndexOf('\nmain().catch')) + `
+    vm.runInContext(source.slice(0, source.indexOf('\n// BOOTSTRAP')) + `
         STATE.canvas = document.getElementById('glCanvas');
         STATE.performanceMonitor = new PerformanceMonitor(null);
         globalThis.scene = { STATE, sceneControls, ritualCycle, ritualPresentation, ritualAudio,
             sceneEvents, resetScene, advanceScene, setScenePaused, requestScenePointerLock,
             comfortSettings, updateBoatMotion, getCameraPosition,
             voyageArchive, resolveEnding, openEndingChoice,
+            main,
             inspect: () => { compassInspectedOnce = true; },
             uninspect: () => { compassInspectedOnce = false; } };
     `, context);
@@ -335,4 +337,17 @@ test('both endings freeze statistics and persist outcome; refusal requires delib
         scene.resetScene();
         assert.equal(scene.voyageArchive.data.endings.length, 1, 'retry preserves discovered endings');
     }
+});
+
+test('context loss pauses and shows a reload path instead of silently continuing', async () => {
+    const scene = createScene();
+    scene.context.console = { ...console, error() {} };
+    scene.STATE.canvas.getContext = () => null;
+    await assert.rejects(scene.main(), /WebGL 2/);
+    let prevented = false;
+    scene.STATE.canvas.dispatch('webglcontextlost', { preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(scene.STATE.paused, true);
+    assert.equal(scene.get('fatal-error').hidden, false);
+    assert.ok(scene.get('fatal-message').textContent.includes('context was lost'));
 });

@@ -115,6 +115,17 @@ async function validate() {
         'assets/textures/Cthulhu_2k_Metallic.png', 'assets/textures/Cthulhu_2k_Roughness.png'
     ];
     await Promise.all(requiredFiles.map((file) => fs.access(path.join(root, file))));
+    const catalogSource = await fs.readFile(path.join(root, 'js', 'texture-catalog.js'), 'utf8');
+    vm.runInThisContext(catalogSource, { filename: 'texture-catalog.js' });
+    for (const quality of ['low', 'medium', 'high']) {
+        for (const file of Object.values(TextureCatalog.entries(quality))) {
+            const bytes = await fs.readFile(path.join(root, file));
+            assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+            assert.equal(bytes.toString('ascii', 8, 12), 'WEBP');
+        }
+    }
+    await fs.access(path.join(root, 'js/vendor/gl-matrix-min.js'));
+    await fs.access(path.join(root, 'js/vendor/gl-matrix-LICENSE.md'));
     console.log('Static files and model buffers are valid.');
 }
 

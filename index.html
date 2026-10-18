@@ -129,6 +129,14 @@
     </style>
 </head>
 <body>
+    <section id="launch-screen" aria-labelledby="launch-title">
+      <p>A short voyage into the unknown</p><h1 id="launch-title">The Awakening of Cthulhu</h1>
+      <p>Read the compass. Follow the beacon. Choose what the light will remember.</p>
+      <label for="launch-quality">Visual quality</label>
+      <select id="launch-quality"><option value="low">Low · smaller download</option><option value="medium">Medium</option><option value="high" selected>High</option></select>
+      <button id="start-scene" type="button">Begin voyage</button>
+      <p>Keyboard and mouse recommended. Arrow keys look around; E inspects the compass.</p>
+    </section>
     <canvas id="glCanvas" tabindex="1"></canvas>
     <div id="cinematic-overlay" aria-hidden="true"></div>
     <div id="ritual-progress" aria-hidden="true"><span></span></div>
@@ -201,11 +209,11 @@
         <button id="ending-restart" type="button">Witness it again</button>
       </div>
     </section>
-    <div id="loading-screen" role="status" aria-live="polite">
+    <div id="loading-screen" role="status" aria-live="polite" hidden>
       <div class="loading-title">The sea is stirring…</div>
       <div id="loading-status">Loading shaders and artifacts</div>
     </div>
-    <div id="fatal-error" role="alert" hidden></div>
+    <div id="fatal-error" role="alert" hidden><p id="fatal-message"></p><button id="reload-scene" type="button" onclick="location.reload()">Reload scene</button></div>
     <div id="torch-ui">
       Torch Control: <span id="torch-mode">OFF</span><br>
       Brightness: <span id="torch-brightness">0.00</span>
@@ -277,11 +285,12 @@
           document.getElementById('loading-screen').hidden = true;
           const panel = document.getElementById('fatal-error');
           panel.hidden = false;
-          panel.textContent = 'A required script could not be loaded. Check your connection and reload.';
+          document.getElementById('launch-screen').hidden = true;
+          document.getElementById('fatal-message').textContent = 'A required script could not be loaded. Check your connection and reload.';
         }
       }, true);
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.3/gl-matrix-min.js"></script>
+    <script src="js/vendor/gl-matrix-min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/timeline.js"></script>
     <script src="js/scene-controls.js"></script>
@@ -290,6 +299,7 @@
     <script src="js/discovery-system.js"></script>
     <script src="js/wave-field.js"></script>
     <script src="js/voyage-archive.js"></script>
+    <script src="js/texture-catalog.js"></script>
     <script src="js/performance-monitor.js"></script>
     <script src="js/environment-effects.js"></script>
     <script src="js/weather-system.js"></script>

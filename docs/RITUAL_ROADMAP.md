@@ -128,7 +128,9 @@ Uygulama: [Ritüel XIII raporu](rituals/RITUAL_13_REPORT.md). İnsan testi açı
 
 ## Ritüel XIV — Hafifleyen Yük
 
-**Durum:** Planlandı · **Öncelik:** P1 · **Bağımlılık:** XIII; VIII ölçümleri başlangıç referansı
+**Durum:** Doğrulama bekliyor · **Öncelik:** P1 · **Bağımlılık:** XIII; VIII ölçümleri başlangıç referansı
+
+Uygulama ve boyut ölçümleri: [Ritüel XIV raporu](rituals/RITUAL_14_REPORT.md).
 
 **Amaç:** Tam içerikli deneyimin yükleme ve kare süresi maliyetini azaltmak.
 
