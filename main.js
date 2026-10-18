@@ -6,6 +6,7 @@ const {
 const sceneEvents = new window.SceneRuntime.EventBus();
 const sceneControls = new window.SceneControls();
 const comfortSettings = new window.ComfortSettings();
+const navigation = new window.VoyageNavigation();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
 const ritualCycle = new window.RitualCycle(sceneEvents);
@@ -230,6 +231,47 @@ document.addEventListener('focusin', (event) => {
 });
 window.addEventListener('keyup', (event) => sceneControls.keys.delete(event.key.toLowerCase()));
 document.addEventListener('pointerlockerror', reportPointerLockError);
+document.getElementById('inspect-compass').addEventListener('click', () => {
+    toggleCompassInspection();
+    STATE.canvas?.focus();
+});
+
+function toggleCompassInspection() {
+    if (STATE.paused || STATE.awakeningStarted) return;
+    sceneControls.keys.clear();
+    STATE.compassInspectMode = !STATE.compassInspectMode;
+    STATE.compassYaw = 0;
+    STATE.compassPitch = 0;
+    if (STATE.compassInspectMode) {
+        window.hideCompassWarning?.();
+        sceneEvents.emit('interaction:compass');
+    } else compassInspectedOnce = true;
+}
+
+function rotateCamera(yawDelta, pitchDelta) {
+    STATE.yaw += yawDelta;
+    STATE.pitch = Math.max(-89, Math.min(89, STATE.pitch + pitchDelta));
+    const yaw = toRadians(STATE.yaw), pitch = toRadians(STATE.pitch);
+    STATE.cameraFront = STATE.vec3.fromValues(Math.cos(yaw) * Math.cos(pitch), Math.sin(pitch), Math.sin(yaw) * Math.cos(pitch));
+    const right = STATE.vec3.fromValues(-Math.sin(yaw), 0, Math.cos(yaw));
+    STATE.cameraUp = STATE.vec3.fromValues(-right[2] * STATE.cameraFront[1], Math.cos(pitch), right[0] * STATE.cameraFront[1]);
+}
+
+function updateNavigation() {
+    const sample = navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime);
+    const degrees = (sample.heading * 180 / Math.PI + 360) % 360;
+    document.getElementById('compass-readout').textContent = `Heading ${degrees.toFixed(0).padStart(3, '0')}° · Ruins ${sample.distance.toFixed(0)}m${sample.disturbed ? ' · Needle unstable' : ''}`;
+    const hint = navigation.guidance(sample, compassInspectedOnce, STATE.compassInspectMode, STATE.awakeningStarted, STATE.torchLit, STATE.witness.complete);
+    const hintElement = document.getElementById('voyage-hint');
+    if (hintElement.textContent !== hint) hintElement.textContent = hint;
+    const beacon = document.getElementById('bearing-beacon');
+    beacon.hidden = STATE.awakeningStarted || Math.abs(sample.relative) > Math.PI / 3;
+    beacon.style.left = `${50 + Math.max(-43, Math.min(43, sample.relative * 75))}%`;
+    beacon.style.top = `${Math.max(8, Math.min(90, 47 + STATE.pitch * 1.5))}%`;
+    document.getElementById('inspect-compass').hidden = STATE.awakeningStarted;
+    document.getElementById('inspect-compass').textContent = STATE.compassInspectMode ? 'Lower compass · E / C' : 'Inspect compass · E';
+    return sample;
+}
 for (const [id, key] of Object.entries({ 'comfort-system': 'followSystem', 'comfort-boat': 'reduceBoat',
     'comfort-shake': 'reduceShake', 'comfort-lightning': 'reduceLightning' })) {
     const input = document.getElementById(id);
@@ -504,6 +546,14 @@ window.addEventListener("keydown", (e) => {
         return;
     }
     if (STATE.paused) return;
+
+    if (key === 'e' && !e.repeat) { toggleCompassInspection(); return; }
+    if (!STATE.compassInspectMode && key.startsWith('arrow')) {
+        rotateCamera(key === 'arrowleft' ? -4 : key === 'arrowright' ? 4 : 0,
+            key === 'arrowup' ? 3 : key === 'arrowdown' ? -3 : 0);
+        e.preventDefault();
+        return;
+    }
 
     if (e.key.toLowerCase() === 'n') {
         if (!e.repeat) ritualAudio.toggle();
@@ -1001,21 +1051,8 @@ function getFPSTorchMatrix() {
 
 
 function isLookingAtRlyeh() {
-    for (const pos of pillarPositions) {
-        const toPillar = STATE.vec3.create();
-        STATE.vec3.sub(toPillar, pos, STATE.shipPosition);
-        STATE.vec3.normalize(toPillar, toPillar);
-
-        const dot = Math.max(-1, Math.min(1, STATE.vec3.dot(STATE.cameraFront, toPillar)));
-        const angle = Math.acos(dot) * 180 / Math.PI; // derece cinsinden
-
-        const distance = STATE.vec3.distance(STATE.shipPosition, pos);
-
-        if (distance < 40.0 && angle < 40) {
-            return true; // En az bir sütun için trigger!
-        }
-    }
-    return false;
+    if (!compassInspectedOnce || STATE.compassInspectMode) return false;
+    return navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).canAwaken;
 }
 
 function resetScene(advanceCycle = false) {
@@ -1199,6 +1236,7 @@ function advanceScene(timestamp) {
     STATE.performanceMonitor?.update(rawSeconds);
     ritualCycle.update(deltaSeconds);
     ritualPresentation.update(deltaSeconds);
+    updateNavigation();
     if (!compassInspectedOnce || STATE.awakeningStarted || STATE.compassInspectMode || document.getElementById('comfort-controls').open || isInterfaceTarget(document.activeElement)) {
         sceneControls.keys.clear();
     } else {
@@ -1409,6 +1447,9 @@ function drawScene(timestamp) {
         // Sonra iğne (doku kapalı)
         gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleEBO);
+        const needleMatrix = STATE.mat4.clone(compassMatrix);
+        STATE.mat4.rotateY(needleMatrix, needleMatrix, navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).needleAngle);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, needleMatrix);
         gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, STATE.compassNeedleIndexType, 0);
 
         gl.uniform1i(STATE.uIsCompassLoc, 0);
@@ -1442,6 +1483,9 @@ function drawScene(timestamp) {
         // İğne (doku kapalı)
         gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleEBO);
+        const needleMatrix = STATE.mat4.clone(compassMatrix);
+        STATE.mat4.rotateY(needleMatrix, needleMatrix, -navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).heading + navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).needleAngle);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, needleMatrix);
         gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, STATE.compassNeedleIndexType, 0);
 
         gl.uniform1i(STATE.uIsCompassLoc, 0);

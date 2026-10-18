@@ -133,6 +133,10 @@
     <div id="cinematic-overlay" aria-hidden="true"></div>
     <div id="ritual-progress" aria-hidden="true"><span></span></div>
     <p id="ritual-caption" role="status" aria-live="polite"></p>
+    <p id="voyage-hint" role="status">Find R’lyeh beyond the northern mist. Inspect your compass first (E).</p>
+    <div id="bearing-beacon" aria-hidden="true">◇<small>R’lyeh</small></div>
+    <div id="compass-readout" aria-label="Navigation"></div>
+    <button id="inspect-compass" type="button">Inspect compass · E</button>
     <p id="input-status" role="status" hidden></p>
     <section id="pause-screen" hidden aria-labelledby="pause-title" role="dialog" aria-modal="true">
       <h1 id="pause-title">The sea waits</h1>
@@ -224,17 +228,16 @@
       <small>F2 toggles this panel</small>
     </aside>
     <!-- Compass movement warning (hide after compass interaction in JS) -->
-    <div id="compass-warning">
-      To move the boat, first interact with the <b>compass</b>!
-    </div>
     <!-- Controls Guide -->
     <div id="controls-guide-container">
-      <button id="controls-guide-toggle" type="button" aria-label="Toggle controls" aria-expanded="true" onclick="toggleControlsGuide()">?</button>
-      <div id="controls-guide">
+      <button id="controls-guide-toggle" type="button" aria-label="Toggle controls" aria-expanded="false" onclick="toggleControlsGuide()">?</button>
+      <div id="controls-guide" style="display: none">
         <h3>Controls Guide</h3>
         <ul>
           <li><b>W / A / S / D</b>: Move Forward / Left / Backward / Right</li>
           <li><b>Mouse</b>: Look Around</li>
+          <li><b>Arrow keys</b>: Look around (outside compass inspection)</li>
+          <li><b>E</b>: Inspect / Lower compass</li>
           <li><b>Click Torch</b>: Light the torch (after awakening)</li>
           <li><b>Click Compass</b>: Inspect compass (rotate with WASD / Arrow keys, <b>C</b> to exit)</li>
           <li><b>M</b>: FPS Torch Mode ON/OFF (after lighting)</li>
@@ -264,6 +267,7 @@
     <script src="js/timeline.js"></script>
     <script src="js/scene-controls.js"></script>
     <script src="js/comfort-settings.js"></script>
+    <script src="js/navigation.js"></script>
     <script src="js/performance-monitor.js"></script>
     <script src="js/environment-effects.js"></script>
     <script src="js/weather-system.js"></script>

@@ -58,7 +58,9 @@ Uygulama ve kanıt: [Ritüel IX raporu](rituals/RITUAL_09_REPORT.md).
 
 ## Ritüel X — Kaybolan Kuzey
 
-**Durum:** Planlandı · **Öncelik:** P1 · **Bağımlılık:** IX
+**Durum:** Doğrulama bekliyor · **Öncelik:** P1 · **Bağımlılık:** IX
+
+Uygulama: [Ritüel X raporu](rituals/RITUAL_10_REPORT.md).
 
 **Amaç:** Pusulayı yön bulma aracına dönüştürmek ve ilk dakikayı anlaşılır kılmak.
 

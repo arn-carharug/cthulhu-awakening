@@ -74,7 +74,7 @@ function createScene() {
         addEventListener: (name, fn) => add(listeners, name, fn)
     });
     context.window = context;
-    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'performance-monitor',
+    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'performance-monitor',
         'audio-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
     }
@@ -296,4 +296,18 @@ test('comfort settings actually suppress 3D boat motion and camera shake', () =>
     assert.equal(stillCamera[0], 10);
     assert.equal(stillCamera[1], 1.2);
     assert.notEqual(movingCamera[0], stillCamera[0]);
+});
+
+test('keyboard compass inspection unlocks movement only after lowering; arrows turn the camera', () => {
+    const scene = createScene();
+    scene.key('e');
+    assert.equal(scene.STATE.compassInspectMode, true);
+    assert.equal(scene.ritualCycle.completed.has('compass'), true);
+    scene.key('c');
+    scene.key('w');
+    assert.equal(scene.sceneControls.keys.has('w'), true);
+    scene.keyup('w');
+    scene.key('ArrowRight');
+    assert.equal(scene.STATE.yaw, -86);
+    assert.ok(scene.STATE.cameraFront[0] > 0);
 });
