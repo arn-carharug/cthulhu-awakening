@@ -16,7 +16,7 @@ function createScene() {
         const handlers = new Map();
         const classes = new Set();
         return {
-            id, tagName, hidden: ['pause-screen', 'ending-card', 'witness-focus', 'input-status', 'discovery-card'].includes(id),
+            id, tagName, hidden: ['pause-screen', 'ending-card', 'witness-focus', 'input-status', 'discovery-card', 'choice-card'].includes(id),
             textContent: '', value: '', dataset: {}, style: { setProperty() {} },
             classList: {
                 add: (name) => classes.add(name), remove: (name) => classes.delete(name),
@@ -74,7 +74,7 @@ function createScene() {
         addEventListener: (name, fn) => add(listeners, name, fn)
     });
     context.window = context;
-    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'discovery-system', 'wave-field', 'performance-monitor',
+    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'discovery-system', 'wave-field', 'voyage-archive', 'performance-monitor',
         'audio-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
     }
@@ -86,6 +86,7 @@ function createScene() {
         globalThis.scene = { STATE, sceneControls, ritualCycle, ritualPresentation, ritualAudio,
             sceneEvents, resetScene, advanceScene, setScenePaused, requestScenePointerLock,
             comfortSettings, updateBoatMotion, getCameraPosition,
+            voyageArchive, resolveEnding, openEndingChoice,
             inspect: () => { compassInspectedOnce = true; },
             uninspect: () => { compassInspectedOnce = false; } };
     `, context);
@@ -310,4 +311,28 @@ test('keyboard compass inspection unlocks movement only after lowering; arrows t
     scene.key('ArrowRight');
     assert.equal(scene.STATE.yaw, -86);
     assert.ok(scene.STATE.cameraFront[0] > 0);
+});
+
+test('both endings freeze statistics and persist outcome; refusal requires deliberate confirmation', () => {
+    for (const outcome of ['witness', 'refused']) {
+        const scene = createScene();
+        scene.resolveEnding(outcome);
+        assert.equal(scene.STATE.witness.complete, false, 'cannot end before awakening finishes');
+        scene.STATE.awakeningTimeline.complete = true;
+        scene.STATE.torchLit = true;
+        if (outcome === 'refused') {
+            scene.openEndingChoice();
+            assert.equal(scene.STATE.witness.complete, false);
+            assert.equal(scene.STATE.paused, true);
+            scene.get('reject-confirm').click();
+            assert.equal(scene.STATE.torchLit, false);
+        } else scene.resolveEnding(outcome);
+        assert.equal(scene.STATE.witness.outcome, outcome);
+        assert.equal(scene.ritualCycle.finished, true);
+        assert.equal(scene.voyageArchive.data.endings[0], outcome);
+        scene.resolveEnding(outcome);
+        assert.equal(scene.voyageArchive.data.endings.length, 1);
+        scene.resetScene();
+        assert.equal(scene.voyageArchive.data.endings.length, 1, 'retry preserves discovered endings');
+    }
 });

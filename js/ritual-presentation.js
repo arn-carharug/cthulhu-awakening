@@ -76,6 +76,12 @@
             this.endingTimer = 0.9;
         }
 
+        setOutcome(outcome) {
+            document.getElementById('ending-title').textContent = outcome === 'refused' ? 'You Withheld the Light' : 'The Ancient One Has Awakened';
+            document.getElementById('ending-copy').textContent = outcome === 'refused'
+                ? 'The sea lets you pass. For now.' : 'The sea remembers. So do you.';
+        }
+
         dismissEnding() {
             this.ending.hidden = true;
         }

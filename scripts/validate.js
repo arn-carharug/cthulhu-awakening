@@ -106,7 +106,7 @@ async function validate() {
     const requiredFiles = [
         'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js', 'js/scene-controls.js', 'js/comfort-settings.js', 'js/navigation.js',
         'js/performance-monitor.js', 'js/debug-panel.js', 'js/environment-effects.js',
-        'js/weather-system.js', 'js/omen-system.js', 'js/audio-system.js', 'js/ritual-presentation.js', 'js/game-loop.js', 'js/discovery-system.js', 'js/wave-field.js',
+        'js/weather-system.js', 'js/omen-system.js', 'js/audio-system.js', 'js/ritual-presentation.js', 'js/game-loop.js', 'js/discovery-system.js', 'js/wave-field.js', 'js/voyage-archive.js',
         'shaders/vertex.glsl', 'shaders/fragment.glsl',
         'assets/textures/WeatheredWood2_S.jpg', 'assets/textures/OC1KI90.jpg',
         'assets/textures/boat_wood_wet_v2.png', 'assets/textures/compass_brass_v2.png',

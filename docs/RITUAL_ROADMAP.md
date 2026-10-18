@@ -111,7 +111,9 @@ Uygulama: [Ritüel XII raporu](rituals/RITUAL_12_REPORT.md).
 
 ## Ritüel XIII — Tanıklık ve İnkâr
 
-**Durum:** Planlandı · **Öncelik:** P2 · **Bağımlılık:** XII ve XI'deki oyuncu doğrulaması
+**Durum:** Doğrulama bekliyor · **Öncelik:** P2 · **Bağımlılık:** XII ve XI'deki oyuncu doğrulaması
+
+Uygulama: [Ritüel XIII raporu](rituals/RITUAL_13_REPORT.md). İnsan testi açıkken uygulama, kullanıcının devam yönlendirmesi kapsamında yapıldı.
 
 **Amaç:** Yeniden oynamaya anlamlı bir neden vermek.
 

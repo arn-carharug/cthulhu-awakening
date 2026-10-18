@@ -146,6 +146,13 @@
       <h1 id="discovery-title"></h1><p id="discovery-copy"></p>
       <button id="discovery-close" type="button">Return to the sea</button>
     </section>
+    <div id="ending-choice" hidden><button id="reject-light" type="button">Turn away · B</button><small>You can bear witness, or choose to withhold the light.</small></div>
+    <section id="choice-card" role="dialog" aria-modal="true" aria-labelledby="choice-title" hidden>
+      <h1 id="choice-title">Withhold the light?</h1>
+      <p>The lantern will go dark. This ends the current voyage without bearing witness.</p>
+      <button id="reject-confirm" type="button">Extinguish the lantern and turn away</button>
+      <button id="reject-cancel" type="button">Keep the light</button>
+    </section>
     <p id="input-status" role="status" hidden></p>
     <section id="pause-screen" hidden aria-labelledby="pause-title" role="dialog" aria-modal="true">
       <h1 id="pause-title">The sea waits</h1>
@@ -176,11 +183,12 @@
       <input id="omen-seed" type="number" min="0" max="4294967295" step="1">
       <button id="omen-seed-apply" type="button">Apply seed and retry</button>
       <small>Each four-cycle set contains all four omens.</small>
+      <p id="archive-summary"></p><button id="archive-clear" type="button">Clear discoveries &amp; endings</button>
     </details>
     <section id="ending-card" hidden aria-labelledby="ending-title" role="dialog" aria-modal="true">
       <p class="ending-kicker">The Cycle</p>
       <h1 id="ending-title">The Ancient One Has Awakened</h1>
-      <p>The sea remembers. So do you.</p>
+      <p id="ending-copy">The sea remembers. So do you.</p>
       <dl id="ending-stats">
         <div><dt>Cycle</dt><dd id="stat-cycle">I</dd></div>
         <div><dt>Time</dt><dd id="stat-time">--:--</dd></div>
@@ -281,6 +289,7 @@
     <script src="js/navigation.js"></script>
     <script src="js/discovery-system.js"></script>
     <script src="js/wave-field.js"></script>
+    <script src="js/voyage-archive.js"></script>
     <script src="js/performance-monitor.js"></script>
     <script src="js/environment-effects.js"></script>
     <script src="js/weather-system.js"></script>

@@ -23,6 +23,7 @@
                 this.complete('witness');
                 this.finish();
             });
+            this.events.on('ritual:refused', () => this.finish());
         }
 
         start(advanceCycle = true) {

@@ -8,6 +8,7 @@ const sceneControls = new window.SceneControls();
 const comfortSettings = new window.ComfortSettings();
 const navigation = new window.VoyageNavigation();
 const discoveries = new window.DiscoverySystem();
+const voyageArchive = new window.VoyageArchive();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
 const ritualCycle = new window.RitualCycle(sceneEvents);
@@ -136,11 +137,48 @@ sceneEvents.on('timeline:update', ({ progress }) => ritualAudio.setAwakening(pro
 sceneEvents.on('timeline:complete', () => { STATE.witness.active = true; });
 ['interaction:compass', 'interaction:torch'].forEach((name) => sceneEvents.on(name, () => ritualAudio.cue(name)));
 sceneEvents.on('awakening:started', () => {
+    voyageArchive.record('omens', STATE.omen.id);
+    updateArchiveSummary();
     ritualAudio.cue('awakening:omen');
     const copy = { 'black-tide': 'The black tide carries no reflection.', 'red-wake': 'A red wake follows where no boat has passed.',
         'drowned-star': 'Something green burns beneath the waves.', 'hollow-calm': 'Even the wind is holding its breath.' };
     ritualPresentation.show(copy[STATE.omen.id], 4000);
 });
+sceneEvents.on('discovery:found', ({ id }) => { voyageArchive.record('notes', id); updateArchiveSummary(); });
+
+function updateArchiveSummary() { document.getElementById('archive-summary').textContent = voyageArchive.summary(); }
+updateArchiveSummary();
+document.getElementById('archive-clear').addEventListener('click', () => { voyageArchive.clear(); updateArchiveSummary(); });
+
+function openEndingChoice() {
+    if (STATE.paused || !STATE.awakeningTimeline.complete || STATE.witness.complete) return;
+    document.getElementById('choice-card').hidden = false;
+    setScenePaused(true, false);
+    document.getElementById('reject-cancel').focus();
+}
+document.getElementById('reject-light').addEventListener('click', openEndingChoice);
+document.getElementById('reject-cancel').addEventListener('click', () => {
+    document.getElementById('choice-card').hidden = true; setScenePaused(document.hidden); STATE.canvas?.focus();
+});
+document.getElementById('reject-confirm').addEventListener('click', () => {
+    document.getElementById('choice-card').hidden = true; setScenePaused(document.hidden); resolveEnding('refused'); STATE.canvas?.focus();
+});
+
+function resolveEnding(outcome) {
+    if (STATE.witness.complete || !STATE.awakeningTimeline.complete || !['witness', 'refused'].includes(outcome)) return;
+    STATE.witness.complete = true;
+    STATE.witness.outcome = outcome;
+    if (outcome === 'refused') { STATE.torchLit = false; STATE.torchLightIntensity = 0; }
+    else {
+        STATE.lightning.strike(1.85); STATE.cinematic.shake = 0.42; STATE.cinematic.torchShock = 0.65;
+        ritualAudio.cue('awakening:reveal');
+    }
+    voyageArchive.record('endings', outcome); updateArchiveSummary();
+    ritualPresentation.setOutcome(outcome);
+    sceneEvents.emit(outcome === 'witness' ? 'witness:complete' : 'ritual:refused');
+    ritualPresentation.completeWitness();
+    document.getElementById('ending-choice').hidden = true;
+}
 
 const soundToggle = document.getElementById('sound-toggle');
 const volumeControl = document.getElementById('volume-control');
@@ -220,7 +258,7 @@ function requestScenePointerLock() {
 }
 
 function setScenePaused(paused, showScreen = true) {
-    if (!paused && (document.hidden || !ritualPresentation.ending.hidden || !document.getElementById('discovery-card').hidden)) return;
+    if (!paused && (document.hidden || !ritualPresentation.ending.hidden || !document.getElementById('discovery-card').hidden || !document.getElementById('choice-card').hidden)) return;
     STATE.paused = paused;
     sceneControls.clear();
     STATE.firstMouse = true;
@@ -234,11 +272,11 @@ function setScenePaused(paused, showScreen = true) {
 }
 
 window.addEventListener('blur', () => {
-    if (STATE.canvas && ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden) setScenePaused(true);
+    if (STATE.canvas && ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden && document.getElementById('choice-card').hidden) setScenePaused(true);
     else sceneControls.clear();
 });
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden) setScenePaused(true, ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden);
+    if (document.hidden) setScenePaused(true, ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden && document.getElementById('choice-card').hidden);
 });
 document.addEventListener('focusin', (event) => {
     if (isInterfaceTarget(event.target)) sceneControls.keys.clear();
@@ -288,6 +326,7 @@ function updateNavigation() {
     const nearby = discoveries.nearby(STATE.shipPosition);
     for (const site of discoveries.sites) document.getElementById(`discover-${site.id}`).hidden = STATE.awakeningStarted || !compassInspectedOnce || !nearby.includes(site);
     document.getElementById('light-lantern').hidden = !STATE.awakeningStarted || STATE.torchLit;
+    document.getElementById('ending-choice').hidden = !STATE.awakeningTimeline.complete || STATE.witness.complete;
     return sample;
 }
 
@@ -579,7 +618,8 @@ window.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     const modal = !document.getElementById('pause-screen').hidden
         ? document.getElementById('pause-screen') : !ritualPresentation.ending.hidden ? ritualPresentation.ending
-            : !document.getElementById('discovery-card').hidden ? document.getElementById('discovery-card') : null;
+            : !document.getElementById('discovery-card').hidden ? document.getElementById('discovery-card')
+                : !document.getElementById('choice-card').hidden ? document.getElementById('choice-card') : null;
     if (modal && key === 'tab') {
         const buttons = [...modal.querySelectorAll('button')];
         const index = buttons.indexOf(document.activeElement);
@@ -601,6 +641,7 @@ window.addEventListener("keydown", (e) => {
 
     if (key === 'e' && !e.repeat) { toggleCompassInspection(); return; }
     if (key === 'l' && !e.repeat) { lightLantern(); return; }
+    if (key === 'b' && !e.repeat) { openEndingChoice(); return; }
     if (key === 'f' && !e.repeat) {
         const site = discoveries.nearby(STATE.shipPosition)[0];
         if (site) inspectDiscovery(site.id);
@@ -1117,6 +1158,9 @@ function resetScene(advanceCycle = false) {
     sceneControls.clear();
     discoveries.reset();
     document.getElementById('discovery-card').hidden = true;
+    document.getElementById('choice-card').hidden = true;
+    document.getElementById('ending-choice').hidden = true;
+    STATE.omenEventPlayed = false;
     STATE.awakeningStarted = false;
     STATE.cthulhuRiseY = 0;
     STATE.torchLit = false;
@@ -1281,13 +1325,7 @@ function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
     ritualPresentation.updateWitness(STATE.witness.focus, status);
 
     if (STATE.witness.focus >= 1) {
-        STATE.witness.complete = true;
-        STATE.lightning.strike(1.85);
-        STATE.cinematic.shake = 0.42;
-        STATE.cinematic.torchShock = 0.65;
-        ritualAudio.cue('awakening:reveal');
-        sceneEvents.emit('witness:complete');
-        ritualPresentation.completeWitness();
+        resolveEnding('witness');
     }
 }
 
@@ -1331,6 +1369,14 @@ function drawScene(timestamp) {
     STATE.cinematic.shake = Math.max(0, STATE.cinematic.shake - deltaSeconds * 0.22);
     STATE.cinematic.torchShock = Math.max(0, STATE.cinematic.torchShock - deltaSeconds * 0.38);
     if (STATE.effects.animation) STATE.awakeningTimeline.update(deltaSeconds);
+    const omenMoments = { 'black-tide': [10, 'The tide pulls against the wind.'], 'red-wake': [17, 'A second wake crosses your own.'],
+        'drowned-star': [22, 'A drowned star flickers below the keel.'], 'hollow-calm': [31, 'For a moment, the sea becomes perfectly still.'] };
+    const omenMoment = omenMoments[STATE.omen.id];
+    if (!STATE.omenEventPlayed && STATE.awakeningTimeline.elapsed >= omenMoment[0]) {
+        STATE.omenEventPlayed = true; ritualPresentation.show(omenMoment[1], 3200); ritualAudio.cue('awakening:omen');
+        if (STATE.omen.id === 'red-wake') STATE.lightning.strike(0.7);
+        if (STATE.omen.id === 'black-tide') STATE.cinematic.shake = 0.18;
+    }
     if (STATE.effects.lightning) {
         const struck = STATE.lightning.update(deltaSeconds, STATE.awakeningStarted);
         if (struck) sceneEvents.emit('weather:lightning', { intensity: STATE.lightning.intensity });
