@@ -31,7 +31,8 @@ function createScene(realMath = false) {
             focus() { document.activeElement = this; dispatch(documentListeners, 'focusin', { target: this }); },
             querySelector: (selector) => get(`${id}:${selector}`),
             querySelectorAll: () => id === 'pause-screen' ? [get('pause-resume')]
-                : id === 'ending-card' ? [get('ending-continue'), get('ending-restart')] : [],
+                : id === 'ending-card' ? [get('ending-read'), get('ending-continue'), get('ending-restart')]
+                    : id === 'discovery-card' ? [get('discovery-read'), get('discovery-close')] : [],
             requestPointerLock() { document.pointerLockElement = this; dispatch(documentListeners, 'pointerlockchange'); return Promise.resolve(); }
         };
     }
@@ -69,14 +70,14 @@ function createScene(realMath = false) {
     const context = vm.createContext({
         console, document, performance: { now: () => 0 },
         navigator: { userAgent: 'Node DOM test harness; no real browser' },
-        localStorage: { getItem: () => null, setItem() {} },
+        localStorage: { getItem: () => null, setItem() {} }, AbortController,
         glMatrix: realMath ? require('../js/vendor/gl-matrix-min.js') : { vec3: vector, vec4: vector, mat4: { create: () => [] } },
         requestAnimationFrame() {},
         addEventListener: (name, fn) => add(listeners, name, fn)
     });
     context.window = context;
     for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'discovery-system', 'wave-field', 'voyage-archive', 'performance-monitor',
-        'audio-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
+        'audio-system', 'narration-catalog', 'narration-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
     }
     const source = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
@@ -84,7 +85,7 @@ function createScene(realMath = false) {
     vm.runInContext(source.slice(0, source.indexOf('\n// BOOTSTRAP')) + `
         STATE.canvas = document.getElementById('glCanvas');
         STATE.performanceMonitor = new PerformanceMonitor(null);
-        globalThis.scene = { STATE, sceneControls, ritualCycle, ritualPresentation, ritualAudio,
+        globalThis.scene = { STATE, sceneControls, ritualCycle, ritualPresentation, ritualAudio, narrator, inspectDiscovery,
             sceneEvents, resetScene, advanceScene, setScenePaused, requestScenePointerLock,
             comfortSettings, updateBoatMotion, getCameraPosition,
             voyageArchive, resolveEnding, openEndingChoice,
@@ -200,6 +201,8 @@ test('ending releases mouse and focuses usable buttons; Tab stays in dialog', ()
     assert.equal(scene.document.activeElement.id, 'ending-continue');
     scene.key('Tab');
     assert.equal(scene.document.activeElement.id, 'ending-restart');
+    scene.key('Tab');
+    assert.equal(scene.document.activeElement.id, 'ending-read');
     scene.key('Tab');
     assert.equal(scene.document.activeElement.id, 'ending-continue');
     scene.get('ending-continue').click();
@@ -423,4 +426,27 @@ test('mouse movement on the launch screen cannot rotate an uninitialized camera'
     assert.equal(scene.STATE.firstMouse, true);
     assert.equal(scene.STATE.yaw, -90);
     assert.equal(scene.STATE.pitch, 0);
+});
+
+test('narration adapter routes scene events, discovery cards, endings and reset', () => {
+    const scene = createScene();
+    const played = [];
+    scene.narrator.play = (id, options) => { played.push({ id, options }); return Promise.resolve(true); };
+    scene.sceneEvents.emit('awakening:eyes');
+    assert.equal(played.at(-1).id, 'awakening.eyes');
+    scene.sceneEvents.emit('timeline:complete');
+    assert.equal(played.at(-1).id, 'witness.begin');
+    scene.inspect(); scene.inspectDiscovery('journal');
+    assert.equal(played.at(-1).id, 'discovery.journal');
+    assert.equal(played.at(-1).options.modal, true);
+    assert.equal(scene.STATE.paused, true);
+    scene.get('discovery-close').click();
+    assert.equal(scene.STATE.paused, false);
+    scene.STATE.witness.outcome = 'refused';
+    scene.sceneEvents.emit('ending:shown');
+    assert.equal(played.at(-1).id, 'ending.refused');
+    assert.equal(played.at(-1).options.modal, true);
+    scene.narrator.seen.add('awakening.eyes');
+    scene.resetScene();
+    assert.equal(scene.narrator.seen.size, 0);
 });

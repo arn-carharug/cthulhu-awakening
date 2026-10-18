@@ -152,6 +152,7 @@
     </div>
     <section id="discovery-card" role="dialog" aria-modal="true" aria-labelledby="discovery-title" hidden>
       <h1 id="discovery-title"></h1><p id="discovery-copy"></p>
+      <button id="discovery-read" type="button">Read aloud</button>
       <button id="discovery-close" type="button">Return to the sea</button>
     </section>
     <div id="ending-choice" hidden><button id="reject-light" type="button">Turn away · B</button><small>You can bear witness, or choose to withhold the light.</small></div>
@@ -187,6 +188,9 @@
       <label><input id="comfort-lightning" type="checkbox"> Reduce lightning flashes</label>
       <label for="ambient-volume">Ambient sound</label><input id="ambient-volume" type="range" min="0" max="100" value="80">
       <label for="effects-volume">Sound effects</label><input id="effects-volume" type="range" min="0" max="100" value="80">
+      <label><input id="narration-enabled" type="checkbox" checked> English narrator</label>
+      <label for="narration-volume">Narrator volume</label><input id="narration-volume" type="range" min="0" max="100" value="80">
+      <small id="narration-status" role="status"></small>
       <label for="omen-seed">Replay seed</label>
       <input id="omen-seed" type="number" min="0" max="4294967295" step="1">
       <button id="omen-seed-apply" type="button">Apply seed and retry</button>
@@ -205,6 +209,7 @@
         <div><dt>Omen</dt><dd id="stat-omen">--</dd></div>
       </dl>
       <div class="ending-actions">
+        <button id="ending-read" type="button">Replay narration</button>
         <button id="ending-continue" type="button">Keep watching</button>
         <button id="ending-restart" type="button">Witness it again</button>
       </div>
@@ -305,6 +310,8 @@
     <script src="js/environment-effects.js"></script>
     <script src="js/weather-system.js"></script>
     <script src="js/audio-system.js"></script>
+    <script src="js/narration-catalog.js"></script>
+    <script src="js/narration-system.js"></script>
     <script src="js/ritual-presentation.js"></script>
     <script src="js/game-loop.js"></script>
     <script src="js/omen-system.js"></script>

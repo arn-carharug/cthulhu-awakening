@@ -11,6 +11,15 @@ const discoveries = new window.DiscoverySystem();
 const voyageArchive = new window.VoyageArchive();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
+const narrator = new window.NarrationSystem(ritualAudio, window.NarrationCatalog, {
+    status: (copy) => { document.getElementById('narration-status').textContent = copy; },
+    caption: (id, copy, duration) => {
+        if (!id.startsWith('discovery.') && !id.startsWith('ending.')) ritualPresentation.show(copy, duration * 1000 + 250, true);
+    }
+});
+for (const [id, entry] of Object.entries(window.NarrationCatalog.languages.en)) {
+    if (entry.event) sceneEvents.on(entry.event, () => { void narrator.play(id); });
+}
 const ritualCycle = new window.RitualCycle(sceneEvents);
 const omenSystem = new window.OmenSystem(sceneEvents, comfortSettings.values.seed);
 const initialOmen = omenSystem.beginCycle(ritualCycle.cycle);
@@ -183,6 +192,24 @@ function resolveEnding(outcome) {
 const soundToggle = document.getElementById('sound-toggle');
 const volumeControl = document.getElementById('volume-control');
 const volumeValue = document.getElementById('volume-value');
+const narrationToggle = document.getElementById('narration-enabled');
+const narrationVolume = document.getElementById('narration-volume');
+narrationToggle.checked = narrator.enabled;
+narrationVolume.value = String(Math.round(narrator.volume * 100));
+narrationToggle.addEventListener('change', () => narrator.setEnabled(narrationToggle.checked));
+narrationVolume.addEventListener('input', () => narrator.setVolume(Number(narrationVolume.value) / 100));
+async function replayNarration(id) {
+    narrator.setHidden(document.hidden);
+    narrator.setEnabled(true); narrationToggle.checked = true;
+    try { await ritualAudio.enable(); } catch { return; }
+    void narrator.play(id, { modal: true, repeat: true });
+}
+document.getElementById('discovery-read').addEventListener('click', () => {
+    if (!document.getElementById('discovery-card').hidden) void replayNarration(`discovery.${document.getElementById('discovery-card').dataset.site}`);
+});
+document.getElementById('ending-read').addEventListener('click', () => {
+    if (!ritualPresentation.ending.hidden) void replayNarration(STATE.witness.outcome === 'refused' ? 'ending.refused' : 'ending.witnessed');
+});
 for (const channel of ['ambient', 'effects']) {
     const input = document.getElementById(channel === 'ambient' ? 'ambient-volume' : 'effects-volume');
     input.value = String(Math.round(ritualAudio.mix[channel] * 100));
@@ -200,6 +227,7 @@ volumeControl.value = String(initialVolume);
 volumeValue.textContent = String(initialVolume);
 ritualAudio.setVolume(initialVolume / 100);
 ritualAudio.onStateChange = ({ enabled, muted, volume }) => {
+    narrator.sync();
     const percentage = Math.round(volume * 100);
     soundToggle.textContent = percentage === 0 ? 'Sound: silent' : enabled && !muted ? 'Sound: awake' : 'Sound: dormant';
     soundToggle.setAttribute('aria-pressed', String(enabled && !muted && percentage > 0));
@@ -219,6 +247,7 @@ document.getElementById('ending-restart').addEventListener('click', () => {
     requestScenePointerLock();
 });
 document.getElementById('ending-continue').addEventListener('click', () => {
+    narrator.stop();
     ritualPresentation.dismissEnding();
     setScenePaused(false);
     requestScenePointerLock();
@@ -228,7 +257,10 @@ document.getElementById('pause-resume').addEventListener('click', () => {
     setScenePaused(false);
     requestScenePointerLock();
 });
-sceneEvents.on('ending:shown', () => setScenePaused(true, false));
+sceneEvents.on('ending:shown', () => {
+    setScenePaused(true, false);
+    void narrator.play(STATE.witness.outcome === 'refused' ? 'ending.refused' : 'ending.witnessed', { modal: true });
+});
 
 function isInterfaceTarget(target) {
     return Boolean(target?.closest?.('button, input, select, textarea, summary, a, [contenteditable="true"], [role="dialog"]'));
@@ -260,6 +292,7 @@ function requestScenePointerLock() {
 function setScenePaused(paused, showScreen = true) {
     if (!paused && (document.hidden || !ritualPresentation.ending.hidden || !document.getElementById('discovery-card').hidden || !document.getElementById('choice-card').hidden)) return;
     STATE.paused = paused;
+    if (!paused) narrator.setHidden(false);
     sceneControls.clear();
     STATE.firstMouse = true;
     ritualAudio.setPaused(paused);
@@ -272,10 +305,12 @@ function setScenePaused(paused, showScreen = true) {
 }
 
 window.addEventListener('blur', () => {
+    narrator.setHidden(true);
     if (STATE.canvas && ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden && document.getElementById('choice-card').hidden) setScenePaused(true);
     else sceneControls.clear();
 });
 document.addEventListener('visibilitychange', () => {
+    if (document.hidden) narrator.setHidden(true);
     if (document.hidden) setScenePaused(true, ritualPresentation.ending.hidden && document.getElementById('discovery-card').hidden && document.getElementById('choice-card').hidden);
 });
 document.addEventListener('focusin', (event) => {
@@ -337,12 +372,16 @@ function inspectDiscovery(id) {
     document.getElementById('discovery-title').textContent = site.title;
     document.getElementById('discovery-copy').textContent = site.text;
     document.getElementById('discovery-card').hidden = false;
+    document.getElementById('discovery-card').dataset.site = id;
     setScenePaused(true, false);
     document.getElementById('discovery-close').focus();
     sceneEvents.emit('discovery:found', { id });
+    narrator.setHidden(document.hidden);
+    void narrator.play(`discovery.${id}`, { modal: true, repeat: true });
 }
 for (const site of discoveries.sites) document.getElementById(`discover-${site.id}`).addEventListener('click', () => inspectDiscovery(site.id));
 document.getElementById('discovery-close').addEventListener('click', () => {
+    narrator.stop();
     document.getElementById('discovery-card').hidden = true;
     setScenePaused(document.hidden);
     ritualAudio.cue('discovery:found');
@@ -1202,6 +1241,7 @@ function isLookingAtRlyeh() {
 }
 
 function resetScene(advanceCycle = false) {
+    narrator.reset();
     sceneControls.clear();
     discoveries.reset();
     document.getElementById('discovery-card').hidden = true;

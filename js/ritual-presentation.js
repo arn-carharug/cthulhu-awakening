@@ -21,19 +21,23 @@
             this.witnessRing = this.witness.querySelector('.witness-ring');
             this.witnessLabel = this.witness.querySelector('.witness-label');
             this.hideTimer = 0;
+            this.narrationHold = 0;
             this.endingTimer = 0;
             Object.entries(COPY).forEach(([name, copy]) => events.on(name, () => this.show(copy, name === 'awakening:reveal' ? 5200 : 3300)));
             events.on('timeline:update', ({ progress }) => this.setProgress(progress));
             events.on('timeline:complete', () => this.beginWitness());
         }
 
-        show(copy, duration) {
+        show(copy, duration, narrated = false) {
+            if (this.narrationHold > 0 && !narrated) return;
+            if (narrated) this.narrationHold = duration / 1000;
             this.caption.textContent = copy;
             this.caption.classList.add('visible');
             this.hideTimer = duration / 1000;
         }
 
         update(deltaSeconds) {
+            this.narrationHold = Math.max(0, this.narrationHold - deltaSeconds);
             if (this.hideTimer > 0) {
                 this.hideTimer -= deltaSeconds;
                 if (this.hideTimer <= 0) this.caption.classList.remove('visible');
@@ -70,6 +74,7 @@
         }
 
         completeWitness() {
+            this.narrationHold = 0;
             this.hideTimer = 0;
             this.caption.classList.remove('visible');
             this.caption.textContent = '';
@@ -88,6 +93,7 @@
         }
 
         reset() {
+            this.narrationHold = 0;
             this.hideTimer = 0;
             this.endingTimer = 0;
             this.caption.classList.remove('visible');

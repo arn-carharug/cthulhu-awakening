@@ -51,8 +51,10 @@
             this.effectsBus = this.context.createGain();
             this.ambientBus.gain.value = this.mix.ambient;
             this.effectsBus.gain.value = this.mix.effects;
-            this.ambientBus.connect(this.master);
-            this.effectsBus.connect(this.master);
+            this.duckBus = this.context.createGain();
+            this.ambientBus.connect(this.duckBus);
+            this.effectsBus.connect(this.duckBus);
+            this.duckBus.connect(this.master);
 
             const wind = this.context.createBufferSource();
             const windFilter = this.context.createBiquadFilter();
@@ -236,13 +238,21 @@
             this.transients.clear();
         }
 
+        setNarrationDucking(active) {
+            if (!this.duckBus) return;
+            const gain = this.duckBus.gain;
+            gain.cancelScheduledValues(this.context.currentTime);
+            gain.setTargetAtTime(active ? 0.38 : 1, this.context.currentTime, active ? 0.12 : 0.35);
+        }
+
         setPaused(paused) {
             this.paused = paused;
-            if (!this.context) return;
+            if (!this.context) { this.emitState(); return; }
             if (paused) this.stopTransients();
             const now = this.context.currentTime;
             this.master.gain.cancelScheduledValues(now);
             this.master.gain.setTargetAtTime(paused || this.muted ? 0 : this.outputGain(), now, 0.03);
+            this.emitState();
         }
 
         emitState() {

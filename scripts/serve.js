@@ -5,6 +5,9 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.PORT) || 8000;
 const mimeTypes = {
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.json': 'application/json; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
     '.glsl': 'text/plain; charset=utf-8',
     '.html': 'text/html; charset=utf-8',
