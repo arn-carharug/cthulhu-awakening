@@ -19,3 +19,5 @@ Oyun açılışında kalite seçilir, Begin voyage ile varlık yükleme başlar.
 Gerçek tarayıcı yüksek kalite başlangıcı: viewport 1280×720, DPR≈1, render1280×720, yükleme 1384,8 ms; son 600 kare p95 7,4 ms, son örnek penceresi 134,29 FPS. Kaynak: `evidence/ritual-14-high.json`. VIII örneğinin render boyutu1600×900 ve DPR1,25 idi; FPS farkını yalnız bu değişikliğe bağlamak doğru değildir. Önbellek kontrollü değildi; bu ölçüm soğuk yükleme değildir. Görsel kayıt: `evidence/ritual-14-high.jpg`.
 
 1080p/medium, düşük kalite yükleme ve son görsel kontroller XV raporuna yazılacak. Görsel kalite için insan onayı ve GPU donanımı ölçümü açık; başarı iddiası yapılmadı.
+
+Sonraki doğrulama: 1080p/medium ölçümü, düşük dosya yükleme, çalışma anında kalite değişimi ve gerçek context kaybı/yeniden yükleme denetlendi. Ayrıntı [XV raporunda](RITUAL_15_REPORT.md).

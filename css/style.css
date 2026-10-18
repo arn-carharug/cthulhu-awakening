@@ -513,7 +513,14 @@ body.post-disabled #cinematic-overlay {
 #bearing-beacon { position: fixed; top: 47%; color: #d8e9df; text-align: center; z-index: 5; pointer-events: none; }
 #bearing-beacon small { display: block; font-size: 10px; }
 #inspect-compass { position: fixed; bottom: 128px; left: 50%; transform: translateX(-50%); z-index: 21; padding: 7px 12px; color: #e7d7ad; background: #131817; border: 1px solid #b9c8c229; cursor: pointer; }
-@media (max-width: 640px) { #voyage-hint { bottom: 140px; } #inspect-compass { bottom: 202px; } #compass-readout { top: 48px; } }
+@media (max-width: 640px) {
+    #voyage-hint { bottom: 140px; }
+    #inspect-compass { bottom: 202px; }
+    #compass-readout { top: 12px; left: auto; right: 12px; transform: none; width: 135px; text-align: right; font-size: 10px; }
+    #comfort-controls { bottom: 102px; }
+    #discovery-actions { bottom: 260px; }
+    #ending-choice { bottom: 310px; }
+}
 
 @media (max-width: 640px) {
     #objective-panel { top: 82px; width: 175px; }

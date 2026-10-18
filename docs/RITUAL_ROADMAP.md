@@ -2,7 +2,7 @@
 
 18 Ekim 2026 · Başlangıç sürümü: `de31a8e` (`ritual_7`)
 
-Bu projede geliştirme aşamalarının adı **ritüel**. VIII ve IX uygulandı; kalan tarayıcı doğrulamaları açık. X–XV'e başlanmadı.
+Bu projede geliştirme aşamalarının adı **ritüel**. VIII–XV kod, otomatik test ve rapor çalışmaları sırasıyla uygulandı. Gerçek kullanıcı/dinleme ve tam tarayıcı matrisi açık; hiçbir açık kabul maddesi yapılmış sayılmaz. Güncel sonuç: [Ritüel XV raporu](rituals/RITUAL_15_REPORT.md).
 
 Araştırma, emsaller ve mevcut kod bulguları: [Araştırma ve geliştirme önerisi](RESEARCH_AND_ROADMAP.md).
 
@@ -18,7 +18,7 @@ Tek teknede, pusula, keşif ve fener üzerine kurulu kısa bir kozmik korku dene
 - Önceki ritüelin gerekli çıktıları doğrulanmadan bağımlı işe geçilmez. Yeni kapsam veya erteleme kararı bu belgeye işlenir.
 - 18 Ekim kullanıcı yönlendirmesi: Her ritüel test/raporuyla `main` dalına ayrı commitlenerek sırayla uygulanacak. Ortamın izin vermediği gerçek fare kilidi kontrolleri ve insan testleri açık maddeler olarak taşınabilir; bunlar tamamlanmış sayılmaz. Bu istisna VIII'den sonraki geliştirmeye izin verir; son doğrulama XV'te kapanır.
 - Geliştirme ritüeli numarası ile oyundaki **Cycle** sayacı farklı kavramlardır; geliştirme numarası oyun arayüzüne taşınmaz.
-- Gün/saat tahmini ilk ölçümden sonra yapılır. Bu plan uygulama veya yayınlama işlemi başlatmaz.
+- Kullanıcının “ritüeller bitene kadar devam et” yönlendirmesiyle uygulama XV'e kadar sürdürüldü. Commitler main üzerinde ayrı tutulur; push/yayınlama bu çalışmada yapılmadı.
 
 ## Ritüel VIII — Sağlam Güverte
 
@@ -146,7 +146,9 @@ Uygulama ve boyut ölçümleri: [Ritüel XIV raporu](rituals/RITUAL_14_REPORT.md
 
 ## Ritüel XV — Son Mühür
 
-**Durum:** Planlandı · **Öncelik:** P1 · **Bağımlılık:** VIII–XIV kapanışları
+**Durum:** Doğrulama bekliyor · **Öncelik:** P1 · **Bağımlılık:** VIII–XIV kapanışları
+
+Mevcut ortam doğrulaması tamamlandı; kalan insan/çapraz tarayıcı kabulü [Ritüel XV raporunda](rituals/RITUAL_15_REPORT.md) açıkça listeli.
 
 **Amaç:** Deneyimi yayınlanabilir durumda doğrulamak.
 
@@ -160,6 +162,6 @@ Uygulama ve boyut ölçümleri: [Ritüel XIV raporu](rituals/RITUAL_14_REPORT.md
 
 ## Başlangıç ve ertelenen kapsam
 
-VIII ve IX'un kodları ayrı `main` commitleriyle kaydedildi; kalan gerçek tarayıcı kontrolleri raporlarında açık. Kullanıcının sırayla uygulama yönlendirmesi kapsamında sıradaki geliştirme **X — Kaybolan Kuzey**.
+VIII–XV uygulaması sırayla ayrı `main` commitleriyle kaydedilir. Yeni özellik işi kalmadı; sonraki adım XV raporundaki gerçek kullanıcı/dinleme ve çapraz tarayıcı kabul matrisidir.
 
 Açık dünya, balıkçılık ekonomisi, savaş, crafting, çok oyunculu, motor değişimi ve tam mobil kontrol plan dışında. Önce kısa deneyimin oynanabilirliği ve atmosferi doğrulanacak.

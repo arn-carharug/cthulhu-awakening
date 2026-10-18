@@ -7,3 +7,5 @@ Tanıklık sonuna ek olarak, uyanış bitince B/Turn away ile açılan açık bi
 Keşfedilen notlar, görülen alametler ve ulaşılan sonlar ayrı bir yerel arşivde tutulur. R/yeniden tur arşivi silmez. Comfort menüsündeki açıkça adlandırılmış temizleme yalnız arşivi siler; ses/konfor ayarlarını etkilemez. Engelli depolamada oturum sürer. Her alametin farklı zamanlı kısa karşılaşması var; kırmızı alamet ilave küçük fırtına, kara alamet küçük sarsıntı üretir; konfor sınırları geçerlidir.
 
 25 otomatik test PASS: yeni testlerde iki sonun erken tetiklenememesi, onay gerektiren inkâr, bitmiş istatistikler, yeniden denemede arşiv korunması, kayıt tekilleştirme/geri yükleme/temizleme ve bozuk/engelli depolama doğrulandı. İki sonun gerçek tarayıcı üzerinden tamamlanması XV'te denetlenecek; üç oyuncuyla değerlendirme yapılmış sayılmadı.
+
+Sonraki doğrulama: iki sonuç kartı gerçek tarayıcıda görüldü; tanıklık normal rota üzerinden 4/4 tamamlandı. Ayrıntı ve kalan kabul maddeleri [XV raporunda](RITUAL_15_REPORT.md).

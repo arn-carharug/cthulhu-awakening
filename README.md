@@ -6,7 +6,9 @@ A framework-free WebGL 2 scene inspired by cosmic horror. Explore the sea from a
 
 - A current browser with WebGL 2 support
 - A local HTTP server (the application loads shaders and models with `fetch`)
-- Internet access on first load for the `gl-matrix` CDN dependency
+- Node.js 22+ for the included server and tests
+
+The runtime is self-contained: `gl-matrix` 3.4.3 and its MIT license are included in `js/vendor/`. Python and Pillow are only needed to regenerate delivery textures.
 
 Opening `index.html` directly with a `file://` URL is not supported.
 
@@ -25,6 +27,7 @@ $env:PORT=9000; node scripts/serve.js
 ```
 
 Then open [http://localhost:8000](http://localhost:8000).
+Choose visual quality and click **Begin voyage**. Low downloads smaller textures; Medium and High use the full delivery textures.
 
 ## Controls
 
@@ -33,9 +36,12 @@ Then open [http://localhost:8000](http://localhost:8000).
 | Mouse | Look around |
 | Click compass | Inspect the compass and unlock movement |
 | WASD | Move the boat; rotate the compass while inspecting it |
-| Arrow keys | Rotate the compass |
+| Arrow keys | Look around; rotate the compass while inspecting |
+| E / Inspect compass button | Raise or lower the compass |
 | C | Finish compass inspection |
-| Click torch | Light it after the awakening completes |
+| Click torch / L / Raise lantern button | Light the lantern during awakening |
+| F / nearby discovery button | Read an optional journal or marked stone |
+| B / Turn away button | Choose the refusal ending after awakening; confirmation required |
 | M | Toggle FPS torch mode |
 | Mouse wheel | Adjust brightness in FPS torch mode |
 | N | Toggle procedural ritual sound |
@@ -56,6 +62,12 @@ js/asset-loader.js         OBJ/MTL, texture, and shader loading utilities
 js/config.js               Quality presets and scene tuning values
 js/timeline.js             Event bus and deterministic scene timeline
 js/scene-controls.js       Held-key movement and active frame clock
+js/comfort-settings.js     Persistent motion/flash preferences and replay seed
+js/navigation.js           Compass bearings, anomaly drift and next-action hints
+js/discovery-system.js     Optional discovery sites and lantern alignment
+js/wave-field.js           World-space wave sampling matching the water shader
+js/voyage-archive.js        Persistent notes, omens and endings
+js/texture-catalog.js       Low/high delivery texture selection
 js/performance-monitor.js  FPS and frame-time diagnostics
 js/debug-panel.js          F2 developer controls
 js/environment-effects.js Procedural atmospheric particles
@@ -104,7 +116,7 @@ assets/textures/           Textures used by the active scene
 
 ## Ritual roadmap
 
-Development milestones in this project are called **rituals**. Rituals VIII–IX are implemented with remaining browser checks documented; Rituals X–XV are planned.
+Development milestones in this project are called **rituals**. The VIII–XV implementation sequence is complete. Acceptance remains open for human playtests, listening checks and the full normal-browser matrix; see the [Ritual XV report](docs/rituals/RITUAL_15_REPORT.md).
 
 See the [ritual roadmap](docs/RITUAL_ROADMAP.md) for scope, dependencies, and completion criteria, the [Ritual VIII report](docs/rituals/RITUAL_08_REPORT.md) for validation and measurements, and the [research notes](docs/RESEARCH_AND_ROADMAP.md) for references and findings.
 
@@ -112,9 +124,13 @@ Ritual VIII adds frame-rate-independent movement, a pause dialog, focus-loss/hid
 
 Ritual IX adds **Comfort & replay** settings for system motion preference, boat motion, camera shake, and reduced lightning. The saved replay seed reproduces a sequence of shuffled four-omen sets with no adjacent repeats. See the [Ritual IX report](docs/rituals/RITUAL_09_REPORT.md).
 
+Rituals X–XIII add compass navigation, a northern beacon, two optional discoveries, shared world-space boat/ocean motion, layered audio, and two deliberate endings. The local archive records discovered notes, omens and endings; retrying or starting another cycle preserves it. **Clear discoveries & endings** in Comfort clears only the archive.
+
+Ritual XIV reduces active delivery textures from 34.65 MiB to 5.36 MiB on High and 0.51 MiB on Low, adds startup quality selection and a reload path for loading/context errors. Source images remain unchanged. Regenerate with `python scripts/optimize-textures.py` (Pillow required). The F2 panel also offers **Test graphics recovery**, which intentionally loses the current graphics context and requires a reload.
+
 ## Deployment
 
-The repository is static and can be hosted on GitHub Pages or any static HTTP server. Keep the existing relative directory structure. If external CDN access is undesirable, download `gl-matrix-min.js`, serve it locally, and update its script URL in `index.html`.
+The repository is static and can be hosted on GitHub Pages or any static HTTP server. Keep the existing relative directory structure, including `js/vendor/` and `assets/textures/optimized/`. No external CDN is required. This work has not been deployed.
 
 ## Development checks
 

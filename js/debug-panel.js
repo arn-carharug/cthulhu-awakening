@@ -23,6 +23,7 @@
         output.textContent = JSON.stringify(global.getSceneDiagnostics(), null, 2);
         output.hidden = false;
     });
+    document.getElementById('debug-context-loss').addEventListener('click', () => global.dispatchEvent(new CustomEvent('scene:context-loss')));
     global.addEventListener('keydown', (event) => {
         if (event.key === 'F2' && !event.repeat) {
             if (!document.getElementById('launch-screen').hidden || !document.getElementById('loading-screen').hidden) return;

@@ -1,0 +1,104 @@
+{
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+  "viewport": {
+    "width": 360,
+    "height": 800,
+    "dpr": 1.0000000149011612
+  },
+  "renderSize": {
+    "width": 360,
+    "height": 800
+  },
+  "quality": "high",
+  "omenSeed": 20261018,
+  "initialLoadMs": 838.5,
+  "paused": false,
+  "performance": {
+    "sampleCount": 600,
+    "fps": 102.41277555979823,
+    "meanFrameMs": 9.764406779661057,
+    "p95FrameMs": 7.100000000000364
+  },
+  "resources": [
+    {
+      "file": "low/compass_brass_v2.webp",
+      "transferBytes": 85358,
+      "decodedBytes": 85058
+    },
+    {
+      "file": "low/boat_wood_wet_v2.webp",
+      "transferBytes": 55988,
+      "decodedBytes": 55688
+    },
+    {
+      "file": "low/germany010.webp",
+      "transferBytes": 56438,
+      "decodedBytes": 56138
+    },
+    {
+      "file": "low/Cthulhu_2k_AO.webp",
+      "transferBytes": 354,
+      "decodedBytes": 54
+    },
+    {
+      "file": "low/Cthulhu_2k_Base_Color.webp",
+      "transferBytes": 43028,
+      "decodedBytes": 42728
+    },
+    {
+      "file": "low/Cthulhu_2k_Metallic.webp",
+      "transferBytes": 102834,
+      "decodedBytes": 102534
+    },
+    {
+      "file": "low/Cthulhu_2k_Roughness.webp",
+      "transferBytes": 168710,
+      "decodedBytes": 168410
+    },
+    {
+      "file": "low/beautiful-photo-sea-waves.webp",
+      "transferBytes": 24260,
+      "decodedBytes": 23960
+    },
+    {
+      "file": "high/boat_wood_wet_v2.webp",
+      "transferBytes": 642382,
+      "decodedBytes": 642082
+    },
+    {
+      "file": "high/Cthulhu_2k_AO.webp",
+      "transferBytes": 520,
+      "decodedBytes": 220
+    },
+    {
+      "file": "high/compass_brass_v2.webp",
+      "transferBytes": 743018,
+      "decodedBytes": 742718
+    },
+    {
+      "file": "high/germany010.webp",
+      "transferBytes": 455514,
+      "decodedBytes": 455214
+    },
+    {
+      "file": "high/Cthulhu_2k_Metallic.webp",
+      "transferBytes": 702070,
+      "decodedBytes": 701770
+    },
+    {
+      "file": "high/Cthulhu_2k_Base_Color.webp",
+      "transferBytes": 911366,
+      "decodedBytes": 911066
+    },
+    {
+      "file": "high/beautiful-photo-sea-waves.webp",
+      "transferBytes": 356918,
+      "decodedBytes": 356618
+    },
+    {
+      "file": "high/Cthulhu_2k_Roughness.webp",
+      "transferBytes": 1810020,
+      "decodedBytes": 1809720
+    }
+  ]
+}

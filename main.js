@@ -240,7 +240,7 @@ function releaseScenePointerLock() {
 
 function reportPointerLockError() {
     const status = document.getElementById('input-status');
-    status.textContent = 'Mouse capture was unavailable. Click the scene to try again.';
+    status.textContent = 'Mouse capture unavailable. Use arrow keys to look, or click the scene to retry.';
     status.hidden = false;
 }
 
@@ -517,7 +517,7 @@ function getTorchPosition() {
 
 // Mouse/keyboard events: camera and torch hover
 window.addEventListener("mousemove", (event) => {
-    if (STATE.paused || document.getElementById('comfort-controls').open || document.pointerLockElement !== STATE.canvas) return;
+    if (!STATE.canvas || STATE.paused || document.getElementById('comfort-controls').open || document.pointerLockElement !== STATE.canvas) return;
 
     // Skip first mouse move after pointer lock (avoid camera jump)
     if (STATE.firstMouse) {
@@ -710,6 +710,7 @@ document.addEventListener("pointerlockchange", () => {
 window.addEventListener('scene:reset', () => resetScene());
 window.addEventListener('scene:awaken', startAwakening);
 let textureRequest = 0;
+let qualityGeneration = 0;
 async function refreshTextures(quality) {
     const request = ++textureRequest;
     const entries = Object.entries(window.TextureCatalog.entries(quality));
@@ -724,29 +725,37 @@ async function refreshTextures(quality) {
         const key = entries[index][0]; const previous = STATE[key]; STATE[key] = results[index].value;
         if (previous) STATE.gl.deleteTexture(previous);
     }
+    STATE.textureVariant = quality === 'low' ? 'low' : 'high';
     return true;
 }
 window.addEventListener('scene:quality', async (event) => {
     const quality = event.detail.quality;
     if (!qualityPresets[quality]) return;
-    const previous = STATE.quality;
+    const generation = ++qualityGeneration;
+    textureRequest += 1;
+    const previous = STATE.appliedQuality || STATE.quality;
     STATE.quality = quality;
-    if (STATE.gl && ((previous === 'low') !== (quality === 'low'))) {
+    if (STATE.gl && STATE.textureVariant !== (quality === 'low' ? 'low' : 'high')) {
+        const status = document.getElementById('input-status');
+        status.textContent = `Loading ${qualityPresets[quality].label} textures…`; status.hidden = false;
         try { if (!await refreshTextures(quality)) return; }
         catch (error) {
-            if (STATE.quality !== quality) return;
+            if (generation !== qualityGeneration) return;
             STATE.quality = previous; document.getElementById('debug-quality').value = previous;
             reportPointerLockError(); document.getElementById('input-status').textContent = `Quality change failed: ${error.message}`;
             return;
         }
+        status.hidden = true;
     }
-    if (STATE.quality !== quality) return;
+    if (generation !== qualityGeneration) return;
+    document.getElementById('input-status').hidden = true;
     if (STATE.gl) {
         rebuildWaterMesh(qualityPresets[quality].waterSegments);
         rebuildAtmosphere(qualityPresets[quality].particles);
     }
     resizeCanvas(true);
     sceneEvents.emit('quality:changed', { quality, preset: qualityPresets[quality] });
+    STATE.appliedQuality = quality;
 });
 window.addEventListener('scene:effect', (event) => {
     if (event.detail.effect in STATE.effects) {
@@ -757,6 +766,7 @@ window.addEventListener('scene:effect', (event) => {
         sceneEvents.emit('effect:changed', event.detail);
     }
 });
+window.addEventListener('scene:context-loss', () => STATE.gl?.getExtension('WEBGL_lose_context')?.loseContext());
 
 // =====================
 // MAIN
@@ -1120,6 +1130,8 @@ async function main() {
 
 
     STATE.performanceMonitor = new window.PerformanceMonitor(document.getElementById("performance-stats"));
+    STATE.textureVariant = STATE.quality === 'low' ? 'low' : 'high';
+    STATE.appliedQuality = STATE.quality;
     STATE.initialLoadMs = performance.now();
     document.getElementById("loading-screen").hidden = true;
     drawScene(performance.now());

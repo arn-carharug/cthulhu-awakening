@@ -72,6 +72,7 @@
         completeWitness() {
             this.hideTimer = 0;
             this.caption.classList.remove('visible');
+            this.caption.textContent = '';
             this.witness.hidden = true;
             this.endingTimer = 0.9;
         }

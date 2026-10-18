@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 
 // Run the actual scene modules and event handlers, replacing only DOM/audio/GPU
 // boundaries. This checks state integration without pretending to render WebGL.
-function createScene() {
+function createScene(realMath = false) {
     const listeners = new Map();
     const elements = new Map();
     const documentListeners = new Map();
@@ -70,7 +70,7 @@ function createScene() {
         console, document, performance: { now: () => 0 },
         navigator: { userAgent: 'Node DOM test harness; no real browser' },
         localStorage: { getItem: () => null, setItem() {} },
-        glMatrix: { vec3: vector, vec4: vector, mat4: { create: () => [] } },
+        glMatrix: realMath ? require('../js/vendor/gl-matrix-min.js') : { vec3: vector, vec4: vector, mat4: { create: () => [] } },
         requestAnimationFrame() {},
         addEventListener: (name, fn) => add(listeners, name, fn)
     });
@@ -89,6 +89,7 @@ function createScene() {
             comfortSettings, updateBoatMotion, getCameraPosition,
             voyageArchive, resolveEnding, openEndingChoice,
             main,
+            isLookingAtRlyeh, startAwakening, lightLantern, updateWitnessPhase,
             inspect: () => { compassInspectedOnce = true; },
             uninspect: () => { compassInspectedOnce = false; } };
     `, context);
@@ -96,6 +97,7 @@ function createScene() {
         key: (key, options) => dispatch(listeners, 'keydown', { key, ...options }),
         keyup: (key) => dispatch(listeners, 'keyup', { key }),
         blur: () => dispatch(listeners, 'blur'),
+        mouseMove: (props) => dispatch(listeners, 'mousemove', props),
         visibility(hidden) { document.hidden = hidden; dispatch(documentListeners, 'visibilitychange'); }
     };
 }
@@ -350,4 +352,60 @@ test('context loss pauses and shows a reload path instead of silently continuing
     assert.equal(scene.STATE.paused, true);
     assert.equal(scene.get('fatal-error').hidden, false);
     assert.ok(scene.get('fatal-message').textContent.includes('context was lost'));
+});
+
+test('all four omens support the complete loop with real vector math and reduced effects', () => {
+    const encountered = new Set();
+    for (const reduced of [false, true]) {
+    for (let cycle = 1; cycle <= 4; cycle++) {
+        const scene = createScene(true);
+        scene.comfortSettings.set('reduceBoat', reduced);
+        scene.comfortSettings.set('reduceShake', reduced);
+        scene.comfortSettings.set('reduceLightning', reduced);
+        scene.ritualCycle.cycle = cycle;
+        scene.resetScene();
+        encountered.add(scene.STATE.omen.id);
+        scene.key('e'); scene.key('c'); scene.key('w');
+        let timestamp = 0;
+        for (let frame = 0; frame < 600 && !scene.STATE.awakeningStarted; frame++) {
+            const delta = scene.advanceScene(timestamp);
+            if (scene.isLookingAtRlyeh()) scene.startAwakening();
+            scene.STATE.awakeningTimeline.update(delta);
+            timestamp += 1000 / 60;
+        }
+        assert.equal(scene.STATE.awakeningStarted, true);
+        scene.keyup('w');
+        for (let frame = 0; frame < 2600 && !scene.STATE.awakeningTimeline.complete; frame++) {
+            const delta = scene.advanceScene(timestamp);
+            scene.STATE.awakeningTimeline.update(delta);
+            timestamp += 1000 / 60;
+        }
+        assert.equal(scene.STATE.awakeningTimeline.complete, true);
+        scene.lightLantern();
+        const { mat4, vec3, vec4 } = scene.context.glMatrix;
+        const matrix = mat4.create();
+        mat4.translate(matrix, matrix, [scene.STATE.omen.creatureOffset[0], 5, -80 + scene.STATE.omen.creatureOffset[1]]);
+        mat4.scale(matrix, matrix, [25,25,25]);
+        const head = vec4.transformMat4(vec4.create(), vec4.fromValues(0,1.55,1.39,1), matrix);
+        const front = vec3.subtract(vec3.create(), head, scene.getCameraPosition());
+        vec3.normalize(scene.STATE.cameraFront, front);
+        for (let frame = 0; frame < 250 && !scene.STATE.witness.complete; frame++) {
+            const delta = scene.advanceScene(timestamp); scene.updateWitnessPhase(delta, matrix); timestamp += 1000 / 60;
+        }
+        assert.equal(scene.STATE.witness.outcome, 'witness', scene.STATE.omen.id);
+        assert.equal(scene.ritualCycle.completed.size, 4);
+        assert.ok(scene.voyageArchive.data.endings.includes('witness'));
+    }
+    }
+    assert.equal(encountered.size, 4);
+});
+
+test('mouse movement on the launch screen cannot rotate an uninitialized camera', () => {
+    const scene = createScene();
+    scene.STATE.canvas = null;
+    scene.mouseMove({ movementX: 100, movementY: 100 });
+    scene.mouseMove({ movementX: 100, movementY: 100 });
+    assert.equal(scene.STATE.firstMouse, true);
+    assert.equal(scene.STATE.yaw, -90);
+    assert.equal(scene.STATE.pitch, 0);
 });

@@ -27,10 +27,11 @@
 
         snapshot() {
             const sorted = [...this.samples].sort((a, b) => a - b);
+            const initialMean = sorted.length ? sorted.reduce((sum, value) => sum + value, 0) / sorted.length : null;
             return {
                 sampleCount: sorted.length,
-                fps: this.fps,
-                meanFrameMs: this.frameTime,
+                fps: this.fps || (initialMean ? 1000 / initialMean : null),
+                meanFrameMs: this.frameTime || initialMean,
                 p95FrameMs: sorted.length ? sorted[Math.ceil(sorted.length * 0.95) - 1] : null
             };
         }
