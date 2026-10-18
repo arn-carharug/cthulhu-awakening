@@ -74,7 +74,7 @@ function createScene() {
         addEventListener: (name, fn) => add(listeners, name, fn)
     });
     context.window = context;
-    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'discovery-system', 'performance-monitor',
+    for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'discovery-system', 'wave-field', 'performance-monitor',
         'audio-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
     }

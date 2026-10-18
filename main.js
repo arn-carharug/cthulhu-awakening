@@ -14,6 +14,7 @@ const ritualCycle = new window.RitualCycle(sceneEvents);
 const omenSystem = new window.OmenSystem(sceneEvents, comfortSettings.values.seed);
 const initialOmen = omenSystem.beginCycle(ritualCycle.cycle);
 ritualCycle.setOmen(initialOmen.label);
+ritualAudio.setOmen(initialOmen.id);
 const awakeningTimeline = new window.SceneRuntime.SceneTimeline({
     duration: awakeningConfig.duration,
     events: sceneEvents,
@@ -133,10 +134,22 @@ sceneEvents.on('awakening:reveal', () => {
 ].forEach((name) => sceneEvents.on(name, () => ritualAudio.cue(name)));
 sceneEvents.on('timeline:update', ({ progress }) => ritualAudio.setAwakening(progress));
 sceneEvents.on('timeline:complete', () => { STATE.witness.active = true; });
+['interaction:compass', 'interaction:torch'].forEach((name) => sceneEvents.on(name, () => ritualAudio.cue(name)));
+sceneEvents.on('awakening:started', () => {
+    ritualAudio.cue('awakening:omen');
+    const copy = { 'black-tide': 'The black tide carries no reflection.', 'red-wake': 'A red wake follows where no boat has passed.',
+        'drowned-star': 'Something green burns beneath the waves.', 'hollow-calm': 'Even the wind is holding its breath.' };
+    ritualPresentation.show(copy[STATE.omen.id], 4000);
+});
 
 const soundToggle = document.getElementById('sound-toggle');
 const volumeControl = document.getElementById('volume-control');
 const volumeValue = document.getElementById('volume-value');
+for (const channel of ['ambient', 'effects']) {
+    const input = document.getElementById(channel === 'ambient' ? 'ambient-volume' : 'effects-volume');
+    input.value = String(Math.round(ritualAudio.mix[channel] * 100));
+    input.addEventListener('input', () => ritualAudio.setMix(channel, Number(input.value) / 100));
+}
 let initialVolume = 70;
 try {
     const savedVolumeRaw = localStorage.getItem('ritual-volume');
@@ -244,6 +257,7 @@ function toggleCompassInspection() {
     STATE.compassYaw = 0;
     STATE.compassPitch = 0;
     if (STATE.compassInspectMode) {
+        if (!ritualAudio.enabled) ritualAudio.enable().catch(() => {});
         window.hideCompassWarning?.();
         sceneEvents.emit('interaction:compass');
     } else compassInspectedOnce = true;
@@ -292,6 +306,7 @@ for (const site of discoveries.sites) document.getElementById(`discover-${site.i
 document.getElementById('discovery-close').addEventListener('click', () => {
     document.getElementById('discovery-card').hidden = true;
     setScenePaused(document.hidden);
+    ritualAudio.cue('discovery:found');
     STATE.canvas?.focus();
 });
 
@@ -397,13 +412,17 @@ function updateBoatMotion() {
         STATE.boatMotion = { bob: 0, roll: 0, pitch: 0 };
         return;
     }
-    const time = STATE.elapsedTime * oceanConfig.waveSpeed * STATE.omen.waveSpeed;
-    const wave = Math.sin(time) * 0.48
-        + Math.sin(-time * 0.73) * 0.32
-        + Math.sin(time * 0.46) * 0.20;
-    STATE.boatMotion.bob = wave * oceanConfig.waveHeight * STATE.omen.waveHeight;
-    STATE.boatMotion.roll = Math.sin(time * 0.73 + 0.8) * 0.035;
-    STATE.boatMotion.pitch = Math.sin(time * 0.91) * 0.022;
+    const settings = getWaveSettings();
+    const wave = window.WaveField.sample(STATE.shipPosition[0], STATE.shipPosition[2], STATE.elapsedTime, settings.height, settings.speed);
+    STATE.boatMotion.bob = wave.height;
+    STATE.boatMotion.roll = Math.atan(wave.slopeX);
+    STATE.boatMotion.pitch = -Math.atan(wave.slopeZ);
+}
+
+function getWaveSettings() {
+    const surge = STATE.cinematic.surge ? Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 5) / 12)) : 0;
+    return { height: STATE.effects.water ? oceanConfig.waveHeight * STATE.omen.waveHeight * (1 + surge * 1.05) : 0,
+        speed: oceanConfig.waveSpeed * STATE.omen.waveSpeed };
 }
 
 function getCameraPosition() {
@@ -1130,6 +1149,7 @@ function resetScene(advanceCycle = false) {
     ritualCycle.start(advanceCycle);
     STATE.omen = omenSystem.beginCycle(ritualCycle.cycle);
     ritualCycle.setOmen(STATE.omen.label);
+    ritualAudio.setOmen(STATE.omen.id);
     STATE.lightning.setProfile({ intervalScale: STATE.omen.lightningInterval });
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
@@ -1248,6 +1268,8 @@ function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
 
     const locked = STATE.torchLit && STATE.effects.lighting && STATE.torchLightIntensity > 0
         && window.DiscoverySystem.aligned(STATE.cameraFront, toHead);
+    if (locked && !STATE.witness.locked) ritualAudio.cue('witness:locked');
+    STATE.witness.locked = locked;
     if (locked) {
         STATE.witness.focus = Math.min(1, STATE.witness.focus + deltaSeconds / 4);
     } else {
@@ -1362,11 +1384,9 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uIsShipLoc, 0);
     gl.uniform1f(STATE.uCthulhuRevealLoc, 0);
     gl.uniform1i(STATE.uIsWaterLoc, 0);
-    const surgeProgress = STATE.cinematic.surge
-        ? Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 5) / 12))
-        : 0;
-    gl.uniform1f(STATE.uWaveHeightLoc, STATE.effects.water ? oceanConfig.waveHeight * STATE.omen.waveHeight * (1 + surgeProgress * 1.05) : 0);
-    gl.uniform1f(STATE.uWaveSpeedLoc, oceanConfig.waveSpeed * STATE.omen.waveSpeed);
+    const waves = getWaveSettings();
+    gl.uniform1f(STATE.uWaveHeightLoc, waves.height);
+    gl.uniform1f(STATE.uWaveSpeedLoc, waves.speed);
     gl.uniform1f(STATE.uFoamThresholdLoc, oceanConfig.foamThreshold);
     const lightningIntensity = STATE.effects.lightning
         ? comfortSettings.lightningIntensity(STATE.lightning.intensity * STATE.omen.lightningGain) : 0;
@@ -1429,7 +1449,7 @@ function drawScene(timestamp) {
     const torchFlicker = 0.965
         + Math.sin(STATE.elapsedTime * 17.3) * 0.018
         + Math.sin(STATE.elapsedTime * 31.7) * 0.012
-        + STATE.cinematic.torchShock * Math.sin(STATE.elapsedTime * 74.0) * 0.24;
+        + STATE.cinematic.torchShock * Math.sin(STATE.elapsedTime * 74.0) * (comfortSettings.lightningScale < 1 ? 0 : 0.24);
     gl.uniform1f(
         STATE.uTorchLightIntensityLoc,
         STATE.torchLit && STATE.effects.lighting ? STATE.torchLightIntensity * torchFlicker : 0.0

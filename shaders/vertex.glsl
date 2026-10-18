@@ -33,9 +33,10 @@ void main() {
     vec3 animatedNormal = aNormal;
     vWaveHeight = 0.0;
     if (uIsWater) {
-        float phaseA = aPosition.x * 0.055 + uTime * uWaveSpeed;
-        float phaseB = aPosition.z * 0.071 - uTime * uWaveSpeed * 0.73;
-        float phaseC = (aPosition.x + aPosition.z) * 0.031 + uTime * uWaveSpeed * 0.46;
+        vec3 waterPosition = (uModel * vec4(aPosition, 1.0)).xyz;
+        float phaseA = waterPosition.x * 0.055 + uTime * uWaveSpeed;
+        float phaseB = waterPosition.z * 0.071 - uTime * uWaveSpeed * 0.73;
+        float phaseC = (waterPosition.x + waterPosition.z) * 0.031 + uTime * uWaveSpeed * 0.46;
         float wave = sin(phaseA) * 0.48 + sin(phaseB) * 0.32 + sin(phaseC) * 0.20;
         animatedPosition.y += wave * uWaveHeight;
         float derivativeX = cos(phaseA) * 0.48 * 0.055 + cos(phaseC) * 0.20 * 0.031;

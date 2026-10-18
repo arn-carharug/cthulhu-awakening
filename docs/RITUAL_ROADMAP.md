@@ -92,7 +92,9 @@ Uygulama: [Ritüel XI raporu](rituals/RITUAL_11_REPORT.md).
 
 ## Ritüel XII — Derinliğin Nefesi
 
-**Durum:** Planlandı · **Öncelik:** P1 · **Bağımlılık:** XI
+**Durum:** Doğrulama bekliyor · **Öncelik:** P1 · **Bağımlılık:** XI
+
+Uygulama: [Ritüel XII raporu](rituals/RITUAL_12_REPORT.md).
 
 **Amaç:** Ses, su, tekne ve yaratık görünüşünü aynı gerilim çizgisinde birleştirmek.
 

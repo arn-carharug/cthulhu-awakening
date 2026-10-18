@@ -11,6 +11,12 @@
             this.muted = false;
             this.paused = false;
             this.transients = new Set();
+            this.mix = { ambient: 0.8, effects: 0.8 };
+            try {
+                const saved = JSON.parse(global.localStorage.getItem('ritual-mix') || 'null');
+                for (const key of ['ambient', 'effects']) if (Number.isFinite(saved?.[key]) && saved[key] >= 0 && saved[key] <= 1) this.mix[key] = saved[key];
+            } catch { /* Optional persistence. */ }
+            this.omenTone = 110;
             this.volume = 0.7;
             this.onStateChange = null;
         }
@@ -41,6 +47,12 @@
             this.compressor.attack.setValueAtTime(0.004, now);
             this.compressor.release.setValueAtTime(0.28, now);
             this.master.connect(this.compressor).connect(this.context.destination);
+            this.ambientBus = this.context.createGain();
+            this.effectsBus = this.context.createGain();
+            this.ambientBus.gain.value = this.mix.ambient;
+            this.effectsBus.gain.value = this.mix.effects;
+            this.ambientBus.connect(this.master);
+            this.effectsBus.connect(this.master);
 
             const wind = this.context.createBufferSource();
             const windFilter = this.context.createBiquadFilter();
@@ -50,7 +62,7 @@
             windFilter.type = 'lowpass';
             windFilter.frequency.value = 880;
             this.windGain.gain.value = 0.24;
-            wind.connect(windFilter).connect(this.windGain).connect(this.master);
+            wind.connect(windFilter).connect(this.windGain).connect(this.ambientBus);
             wind.start();
 
             this.rumble = this.context.createOscillator();
@@ -61,7 +73,7 @@
             this.rumbleGain.gain.value = 0.035;
             rumbleFilter.type = 'lowpass';
             rumbleFilter.frequency.value = 105;
-            this.rumble.connect(rumbleFilter).connect(this.rumbleGain).connect(this.master);
+            this.rumble.connect(rumbleFilter).connect(this.rumbleGain).connect(this.ambientBus);
             this.rumble.start();
         }
 
@@ -81,9 +93,10 @@
         setAwakening(progress) {
             if (!this.enabled || this.muted || this.paused) return;
             const now = this.context.currentTime;
+            const hush = (progress > 0.53 && progress < 0.57) || (progress > 0.82 && progress < 0.855) ? 0.15 : 1;
             this.rumble.frequency.setTargetAtTime(52 + progress * 26, now, 0.8);
-            this.rumbleGain.gain.setTargetAtTime(0.035 + progress * 0.22, now, 0.6);
-            this.windGain.gain.setTargetAtTime(0.24 + progress * 0.28, now, 1.2);
+            this.rumbleGain.gain.setTargetAtTime((0.035 + progress * 0.22) * hush, now, hush < 1 ? 0.12 : 0.6);
+            this.windGain.gain.setTargetAtTime((0.24 + progress * 0.28) * hush, now, hush < 1 ? 0.12 : 1.2);
         }
 
         cue(name) {
@@ -91,6 +104,41 @@
             if (name === 'awakening:rumble' || name === 'awakening:presence') this.pulseRumble(name === 'awakening:presence' ? 0.5 : 0.28);
             if (name === 'awakening:flash' || name === 'awakening:reveal') this.thunder(name === 'awakening:reveal' ? 0.7 : 0.46);
             if (name === 'awakening:eyes') this.heartbeat();
+            if (name === 'interaction:compass') this.tone(330, -0.3, 0.04, 0.18);
+            if (name === 'interaction:torch') this.tone(160, 0.25, 0.06, 0.35);
+            if (name === 'discovery:found') this.tone(220, -0.4, 0.05, 0.5);
+            if (name === 'witness:locked') this.tone(440, 0, 0.025, 0.25);
+            if (name === 'awakening:omen') this.tone(this.omenTone, -0.65, 0.07, 1.8);
+        }
+
+        tone(frequency, pan, amount, duration) {
+            const now = this.context.currentTime;
+            const oscillator = this.context.createOscillator();
+            const gain = this.context.createGain();
+            oscillator.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(amount, now + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            const nodes = [gain];
+            oscillator.connect(gain);
+            if (this.context.createStereoPanner) {
+                const panner = this.context.createStereoPanner(); panner.pan.value = pan;
+                gain.connect(panner).connect(this.effectsBus); nodes.push(panner);
+            } else gain.connect(this.effectsBus);
+            this.trackTransient(oscillator, nodes);
+            oscillator.start(now); oscillator.stop(now + duration);
+        }
+
+        setMix(channel, value) {
+            if (!['ambient', 'effects'].includes(channel)) return;
+            this.mix[channel] = Math.max(0, Math.min(1, Number(value) || 0));
+            const bus = channel === 'ambient' ? this.ambientBus : this.effectsBus;
+            if (bus) bus.gain.setTargetAtTime(this.mix[channel], this.context.currentTime, 0.05);
+            try { global.localStorage.setItem('ritual-mix', JSON.stringify(this.mix)); } catch { /* Optional. */ }
+        }
+
+        setOmen(id) {
+            this.omenTone = { 'black-tide': 82, 'red-wake': 123, 'drowned-star': 147, 'hollow-calm': 196 }[id] || 110;
         }
 
         pulseRumble(amount) {
@@ -114,7 +162,7 @@
             gain.gain.setValueAtTime(0.001, now);
             gain.gain.linearRampToValueAtTime(amount, now + 0.035);
             gain.gain.exponentialRampToValueAtTime(0.001, now + 2.7);
-            source.connect(filter).connect(gain).connect(this.master);
+            source.connect(filter).connect(gain).connect(this.effectsBus);
             this.trackTransient(source, [filter, gain]);
             source.start(now);
             source.stop(now + 2.8);
@@ -130,7 +178,7 @@
                 gain.gain.setValueAtTime(0.001, now + offset);
                 gain.gain.linearRampToValueAtTime(index % 2 ? 0.11 : 0.19, now + offset + 0.035);
                 gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.24);
-                oscillator.connect(gain).connect(this.master);
+                oscillator.connect(gain).connect(this.effectsBus);
                 this.trackTransient(oscillator, [gain]);
                 oscillator.start(now + offset);
                 oscillator.stop(now + offset + 0.25);
