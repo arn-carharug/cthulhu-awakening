@@ -13,8 +13,17 @@ test('discovery range, repeat inspection, reset and optional completion are inde
     system.reset(); assert.equal(system.found.size, 0);
     assert.equal(system.sites.length, 2);
     const mesh = context.EnvironmentEffects.createDiscoveryMesh(system.sites);
-    assert.equal(mesh.length, 2 * 36 * 11);
+    assert.ok(mesh.length > 2 * 36 * 11);
     assert.ok([...mesh].every(Number.isFinite));
+    const stoneVertices = [];
+    for (let offset = 0; offset < mesh.length; offset += 11) {
+        if (mesh[offset + 9] !== -1) continue;
+        stoneVertices.push(mesh.slice(offset, offset + 11));
+        assert.ok(Math.abs(Math.hypot(...mesh.slice(offset + 3, offset + 6)) - 1) < 1e-5);
+    }
+    assert.ok(stoneVertices.length > 36);
+    assert.ok(Math.min(...stoneVertices.map(vertex => vertex[1])) < -3.5, 'rock base sits below the sea');
+    assert.deepEqual(mesh, context.EnvironmentEffects.createDiscoveryMesh(system.sites));
 });
 test('lantern alignment normalizes vectors and rejects zero or backwards aims', () => {
     const aligned = context.DiscoverySystem.aligned;

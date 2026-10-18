@@ -11,3 +11,9 @@ Yeni otomatik kontroller: keşif mesafesi, aynı nesneyi yeniden inceleme, reset
 Gerçek in-app tarayıcıda pusula düğmesi→C→günlük düğmesi→okuma→denize dönüş akışı doğrulandı; hedef 1/4 oldu, metin ve doğru odak göründü, konsolda hata/uyarı yoktu.
 
 ![Günlük inceleme](evidence/ritual-11-journal.jpg)
+
+## İşaret taşı görsel iyileştirmesi
+
+Açık mavi kutu, tabanı suyun altında kalan düzensiz ve kırık yüzeyli bir kayaya dönüştürüldü. Taş malzemesi katman aşınması, yosun, ıslak dip, tuz izi ve soluk oyma işaret içeriyor. Konum ve keşif metni korundu. Geometri deterministik; yüzey normalleri ve su altındaki taban otomatik olarak doğrulandı. Güncel tüm ritüel testleri 31/31 geçti; dosya/model doğrulaması geçti. In-app tarayıcıda sahne açılışı, kaya görünümü ve taşın keşif kartı doğrulandı.
+
+![Aşınmış işaret taşı](evidence/tide-marked-stone.jpg)

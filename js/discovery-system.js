@@ -2,7 +2,7 @@
     const SITES = Object.freeze([
         { id: 'journal', title: 'The drifting journal', position: [8, -2.7, 43], color: [0.64, 0.44, 0.21],
             text: 'The last entry ends mid-sentence: “The compass lies near the stones. Keep the pale beacon ahead. If the eyes open, the lantern can bear witness.”' },
-        { id: 'stone', title: 'The tide-marked stone', position: [-9, -1.4, 17], color: [0.23, 0.49, 0.43],
+        { id: 'stone', title: 'The tide-marked stone', position: [-9, -1.4, 17], color: [0.29, 0.28, 0.24],
             text: 'A weathered inscription: “Three pillars keep the threshold. The sea remembers every visitor. What you choose to illuminate will remember you.”' }
     ]);
     class DiscoverySystem {

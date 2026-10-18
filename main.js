@@ -837,6 +837,8 @@ async function main() {
     STATE.uLightningIntensityLoc = STATE.gl.getUniformLocation(STATE.program, "uLightningIntensity");
     STATE.uLightningColorLoc = STATE.gl.getUniformLocation(STATE.program, "uLightningColor");
     STATE.uIsCthulhuLoc = STATE.gl.getUniformLocation(STATE.program, "uIsCthulhu");
+    STATE.uIsDiscoveryLoc = STATE.gl.getUniformLocation(STATE.program, "uIsDiscovery");
+    STATE.uStoneOriginLoc = STATE.gl.getUniformLocation(STATE.program, "uStoneOrigin");
     STATE.uCthulhuRevealLoc = STATE.gl.getUniformLocation(STATE.program, "uCthulhuReveal");
 
     document.getElementById("loading-status").textContent = "Loading models and textures in parallel";
@@ -1478,6 +1480,7 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uIsCthulhuLoc, 0);
     gl.uniform1i(STATE.uIsShipLoc, 0);
     gl.uniform1f(STATE.uCthulhuRevealLoc, 0);
+    gl.uniform1i(STATE.uIsDiscoveryLoc, 0);
     gl.uniform1i(STATE.uIsWaterLoc, 0);
     const waves = getWaveSettings();
     gl.uniform1f(STATE.uWaveHeightLoc, waves.height);
@@ -1672,8 +1675,11 @@ function drawScene(timestamp) {
 
     // Nearby physical discoveries use the existing material program.
     gl.bindVertexArray(STATE.discoveryVAO);
+    gl.uniform1i(STATE.uIsDiscoveryLoc, 1);
+    gl.uniform3fv(STATE.uStoneOriginLoc, discoveries.sites.find((site) => site.id === 'stone').position);
     gl.uniformMatrix4fv(STATE.uModelLoc, false, STATE.mat4.create());
     gl.drawArrays(gl.TRIANGLES, 0, STATE.discoveryCount);
+    gl.uniform1i(STATE.uIsDiscoveryLoc, 0);
 
     // === PILLARS ÇİZİMİ ===
     gl.activeTexture(gl.TEXTURE1);

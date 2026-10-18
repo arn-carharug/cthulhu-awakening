@@ -43,6 +43,8 @@ uniform float uLightningIntensity;
 uniform vec3 uLightningColor;
 uniform bool uIsCthulhu;
 uniform float uCthulhuReveal;
+uniform bool uIsDiscovery;
+uniform vec3 uStoneOrigin;
 
 out vec4 fragColor;
 
@@ -86,6 +88,56 @@ float randomNoise(vec2 coordinate) {
     return fract(sin(dot(coordinate, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+float stoneNoise(vec3 point) {
+    vec3 cell = floor(point);
+    vec3 f = fract(point);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = randomNoise(cell.xy + cell.z * 37.0);
+    float b = randomNoise(cell.xy + vec2(1.0, 0.0) + cell.z * 37.0);
+    float c = randomNoise(cell.xy + vec2(0.0, 1.0) + cell.z * 37.0);
+    float d = randomNoise(cell.xy + vec2(1.0, 1.0) + cell.z * 37.0);
+    float e = randomNoise(cell.xy + (cell.z + 1.0) * 37.0);
+    float g = randomNoise(cell.xy + vec2(1.0, 0.0) + (cell.z + 1.0) * 37.0);
+    float h = randomNoise(cell.xy + vec2(0.0, 1.0) + (cell.z + 1.0) * 37.0);
+    float j = randomNoise(cell.xy + vec2(1.0, 1.0) + (cell.z + 1.0) * 37.0);
+    return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,g,f.x), mix(h,j,f.x), f.y), f.z);
+}
+
+float stoneGroove(vec2 p, vec2 a, vec2 b) {
+    vec2 edge = b - a;
+    return length(p - a - edge * clamp(dot(p-a, edge) / dot(edge, edge), 0.0, 1.0));
+}
+
+vec3 shadeWeatheredStone() {
+    vec3 p = vFragPos - uStoneOrigin;
+    vec3 normal = normalize(vNormal);
+    float strata = stoneNoise(p * vec3(3.0, 6.5, 3.0));
+    float grain = stoneNoise(p * 24.0);
+    float patches = stoneNoise(p * 2.4 + vec3(3.0));
+    vec3 stone = vColor * mix(0.62, 1.18, strata) + (grain - 0.5) * 0.055;
+    float fissure = 1.0 - smoothstep(0.025, 0.075, abs(sin(p.y * 9.0 + patches * 5.0 + p.x * 1.7)));
+    stone *= 1.0 - fissure * 0.28;
+    float moss = smoothstep(0.43, 0.72, patches) * (1.0 - smoothstep(-0.5, 1.2, p.y));
+    stone = mix(stone, vec3(0.09, 0.115, 0.06) * (0.75 + grain * 0.5), moss * 0.75);
+    float wet = 1.0 - smoothstep(-2.4, -0.6, p.y);
+    stone *= mix(1.0, 0.58, wet);
+    float salt = exp(-abs(vFragPos.y + 2.85) * 9.0) * smoothstep(0.3, 0.7, grain);
+    stone += vec3(0.095, 0.09, 0.075) * salt;
+    // A worn, non-emissive fork inscription on the seaward face.
+    vec2 mark = p.xy;
+    float groove = min(stoneGroove(mark, vec2(-0.03,-1.0), vec2(-0.03,0.8)),
+        min(stoneGroove(mark, vec2(-0.03,0.52), vec2(0.33,0.17)), stoneGroove(mark, vec2(-0.03,-0.27), vec2(-0.34,0.08))));
+    float engraving = (1.0 - smoothstep(0.018, 0.055, groove)) * smoothstep(0.2, 0.65, normal.z);
+    stone *= 1.0 - engraving * 0.72;
+    float key = max(dot(normal, normalize(vec3(0.3,0.8,0.4))), 0.0);
+    vec3 color = stone * (uAmbientLight * 0.38 + key * 0.55);
+    color += calculateTorchLight(stone, 0.0);
+    vec3 viewDirection = normalize(uCameraPos - vFragPos);
+    float sheen = pow(max(dot(normal, normalize(viewDirection + vec3(0.3,0.8,0.4))), 0.0), 30.0);
+    color += vec3(0.035,0.045,0.043) * wet * sheen;
+    return color;
+}
+
 vec3 finishSceneColor(vec3 color) {
     color += uLightningColor * uLightningIntensity;
     if (uFogEnabled) {
@@ -127,6 +179,10 @@ void main() {
         return;
     }
     vec3 baseColor = vColor;
+    if (uIsDiscovery && vTexCoord.x < -0.5) {
+        fragColor = vec4(finishSceneColor(shadeWeatheredStone()), 1.0);
+        return;
+    }
     if (uIsTorch) {
         float patina = 0.82 + 0.18 * sin(vLocalPos.x * 74.0 + sin(vLocalPos.y * 91.0));
         baseColor *= patina;
