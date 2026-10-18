@@ -1,6 +1,6 @@
 # Anlatıcı planı — İngilizce ses, ardından Türkçe kayıtlar
 
-Durum: Planlandı. Ses kaydı üretilmedi; oyun entegrasyonu yapılmadı.
+Durum: XVI–XIX kayıt üretimi, oyun entegrasyonu ve mevcut ortam doğrulaması uygulandı. İnsan dinleme ve normal Chrome/Edge/Firefox kabulü açık. Sonuçlar: [XVI](rituals/RITUAL_16_REPORT.md), [XVII](rituals/RITUAL_17_REPORT.md), [XVIII](rituals/RITUAL_18_REPORT.md), [XIX](rituals/RITUAL_19_REPORT.md).
 
 Kullanıcı kararı: İlk sürüm İngilizce AI anlatıcı; sonraki Türkçe anlatım kullanıcının kendi sesiyle yapılacak. Mevcut framework'süz WebGL 2 altyapısı korunacak. Bu plan, VIII–XV kapsamına eklenen yeni geliştirme dizisidir; XV'in açık kabul kontrollerini kapatmış sayılmaz.
 
@@ -9,8 +9,8 @@ Kullanıcı kararı: İlk sürüm İngilizce AI anlatıcı; sonraki Türkçe anl
 Amaç: Anlatıcının tonunu ve üretim metnini belirlemek.
 
 - Sakin, pes, tehditkâr, anlaşılır İngilizce; kontrollü nefes ve duraklamalar. Bağırma ve kelimeleri örten yoğun efekt kullanılmayacak.
-- Önce üç kısa örnek: “You are no longer alone.”, “It sees you.” ve taş yazıtından bir bölüm. Tam kayıt paketinden önce kullanıcı bu örneklerden ses tarzını seçecek.
-- Hizmet ve ses seçimi henüz yapılmadı. Üretimden önce kullanım/yayın hakları, indirme biçimi ve maliyet doğrulanacak; ücretli üretim ayrıca kullanıcı tarafından yetkilendirilecek. Bu ortamda doğrudan AI konuşma üretim aracı yok; ses dosyalarının sağlanması veya erişilebilir bir üretim hizmeti gerekiyor.
+- İlk taslak üç kısa örnekten kullanıcı seçimi öngörüyordu. Kullanıcının sonraki “devam et, sorma” talimatıyla uygulama sırasında ses seçilerek tüm paket üretildi; kullanıcı dinleme onayı verilmiş sayılmıyor.
+- Üretim yolu: proje araç önbelleğine kurulan Piper 1.3.0 ve resmi en_US-libritts_r-medium modeliyle ücretsiz yerel CPU çıkarımı. Kaynak veri lisansı, model kartı ve kesin revizyon teslimde belgelendi. Harici ücretli hizmet kullanılmadı; doğrudan konuşma aracı eksikliği yerel üretimle giderildi.
 - R'lyeh ve Cthulhu için tutarlı telaffuz notu hazırlanacak; özel bir kişinin sesini taklit etmek gerekmiyor.
 - İlk paket 10 kayıt: iki keşif, altı önemli anlatı anı ve iki final. Kontrol talimatları ve sürekli değişen HUD değerleri seslendirilmeyecek.
 
@@ -79,4 +79,4 @@ Kullanıcının kendi sesi için cümle başına ayrı temiz kayıt ve okuma yö
 
 ## Uygulama sırası
 
-Önce XVI'nın üç ses örneği ve üretim yolu somutlaştırılacak. Ardından XVII → XVIII → XIX. Her ritüel kendi raporu ve ayrı `main` commit'iyle ilerleyecek. Üretim hizmeti olmadan entegrasyon iskeleti geliştirilebilir; buna rağmen ses üretimi veya dinleme kabulü tamamlandı diye yazılmayacak. Push/yayın bu planın kapsamında değil.
+XVI → XVII → XVIII → XIX sırasıyla uygulandı; her biri ayrı rapor ve `main` commit'iyle tutuldu. Gerçek İngilizce sesler yerelde üretildi; bunlar test sesi veya işletim sistemi konuşma sentezi değil. İnsan dinleme kabulü ve erişilemeyen normal tarayıcı kontrolleri açık tutuluyor. Push/yayın bu planın kapsamında değil.

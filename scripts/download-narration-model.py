@@ -3,13 +3,13 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from urllib.request import urlopen, urlretrieve
+from urllib.request import urlretrieve
 
 root = Path(__file__).resolve().parents[1]
 target = root / '.tools/narration/model'
 target.mkdir(parents=True, exist_ok=True)
 repository = 'rhasspy/piper-voices'
-revision = json.load(urlopen(f'https://huggingface.co/api/models/{repository}'))['sha']
+revision = 'c10ece1aade47bb51c153c893d14e5bf8e5b7117'
 folder = 'en/en_US/libritts_r/medium'
 files = ['en_US-libritts_r-medium.onnx', 'en_US-libritts_r-medium.onnx.json', 'MODEL_CARD']
 records = []

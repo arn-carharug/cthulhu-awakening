@@ -8,7 +8,7 @@ A framework-free WebGL 2 scene inspired by cosmic horror. Explore the sea from a
 - A local HTTP server (the application loads shaders and models with `fetch`)
 - Node.js 22+ for the included server and tests
 
-The runtime is self-contained: `gl-matrix` 3.4.3 and its MIT license are included in `js/vendor/`. Python and Pillow are only needed to regenerate delivery textures.
+The runtime is self-contained: `gl-matrix` 3.4.3 and its MIT license are included in `js/vendor/`. Python/Pillow regenerate textures; Python/Piper and FFmpeg regenerate narration. None are required by players.
 
 Opening `index.html` directly with a `file://` URL is not supported.
 
@@ -97,6 +97,9 @@ assets/textures/           Textures used by the active scene
 - Exponential distance fog thickens during the awakening.
 - The lantern combines short-range omnidirectional light with a broad forward lobe.
 - Procedural dust and moisture particles drift around the camera.
+- Ten pre-generated English neural narration clips accompany discoveries, key awakening moments and both endings. Playback is local; no speech service or API key is used during play.
+- Comfort & replay offers independent narrator enable/volume controls. Master mute covers narration; Read aloud on notes and Replay narration on endings enable deliberate replay.
+- Narration briefly lowers ambient/effect audio, pauses with the scene, and stops when a note closes or a cycle resets. Text remains available with narration disabled or a recording unavailable.
 - Cinematic grading adds tone mapping, vignette, grain, and a cold color bias.
 - The ocean uses multi-directional vertex waves, dynamic normals, foam, and Fresnel reflections.
 - Boat and camera motion are synchronized with the active wave field.
@@ -130,7 +133,11 @@ Ritual XIV reduces active delivery textures from 34.65 MiB to 5.36 MiB on High a
 
 ## Deployment
 
-The repository is static and can be hosted on GitHub Pages or any static HTTP server. Keep the existing relative directory structure, including `js/vendor/` and `assets/textures/optimized/`. No external CDN is required. This work has not been deployed.
+The repository is static and can be hosted on GitHub Pages or any static HTTP server. Keep the existing relative directory structure, including `js/vendor/`, `assets/textures/optimized/`, and `assets/audio/narration/en/`. No external CDN is required. This work has not been deployed.
+
+Narration rituals XVI–XIX have recordings and playback implemented; human listening and the full normal-browser acceptance matrix remain open. See the [narration plan](docs/NARRATION_PLAN.md), [Ritual XIX report](docs/rituals/RITUAL_19_REPORT.md), and [voice credits](assets/audio/narration/ATTRIBUTION.md). The first pack is English; a future Turkish pack will use the author's own recordings. No Turkish pack or custom voice clone is included.
+
+For audio production, install `piper-tts==1.3.0` into `.tools/narration/python`, then run `python scripts/download-narration-model.py` and `python scripts/generate-narration.py`. FFmpeg/FFprobe must be on PATH. `python scripts/verify-narration.py` independently decodes and measures the final MP3 files. The model/runtime cache is ignored by Git and not needed for deployment. Clean WAV sources are retained under `assets/audio/narration/source/en/`; gameplay only requests the compressed files.
 
 ## Development checks
 

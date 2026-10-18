@@ -1,0 +1,98 @@
+{
+  "clips": [
+    {
+      "id": "discovery.journal",
+      "bytes": 79037,
+      "durationSeconds": 9.776,
+      "integratedLUFS": -19.83,
+      "truePeakDBTP": -2.26,
+      "sha256": "39da357e7a745d32941686e040fca18c9e8ae72cfa61edb4ad33c4f1eb05b345",
+      "decoded": true
+    },
+    {
+      "id": "discovery.stone",
+      "bytes": 66289,
+      "durationSeconds": 8.198,
+      "integratedLUFS": -19.35,
+      "truePeakDBTP": -2.35,
+      "sha256": "e6b98dd7d26b00ce4b51cafdd175ea6e86d853baeaf999122ca228f39fbe1fb7",
+      "decoded": true
+    },
+    {
+      "id": "awakening.rumble",
+      "bytes": 17806,
+      "durationSeconds": 2.118,
+      "integratedLUFS": -19.41,
+      "truePeakDBTP": -4.81,
+      "sha256": "0f0605c35d10568e990f282732664a676acf1dea9ca62a67f6132e7bbbb85b84",
+      "decoded": true
+    },
+    {
+      "id": "awakening.presence",
+      "bytes": 14044,
+      "durationSeconds": 1.659,
+      "integratedLUFS": -19.44,
+      "truePeakDBTP": -5.21,
+      "sha256": "b45f7144148d8ce1d7a40376b94fd3d85178889d9fa082cd9510572123e33f07",
+      "decoded": true
+    },
+    {
+      "id": "awakening.silhouette",
+      "bytes": 20940,
+      "durationSeconds": 2.527,
+      "integratedLUFS": -19.44,
+      "truePeakDBTP": -4.56,
+      "sha256": "184067db7a0f6ffc8e27793fa5480c283ab8dae9130edd59a9bdbc15e368a619",
+      "decoded": true
+    },
+    {
+      "id": "awakening.eyes",
+      "bytes": 8820,
+      "durationSeconds": 1.008,
+      "integratedLUFS": -19.42,
+      "truePeakDBTP": -6.11,
+      "sha256": "33dbf73563ed4b4cb20546e0a064f697566ae04a33f4642b8e6a206737931dd2",
+      "decoded": true
+    },
+    {
+      "id": "awakening.reveal",
+      "bytes": 14671,
+      "durationSeconds": 1.749,
+      "integratedLUFS": -19.48,
+      "truePeakDBTP": -4.91,
+      "sha256": "8fb278eae53a10beb9d9ba8944ec1ab0bd846f9ecefb500a4c6bee70d699d6a8",
+      "decoded": true
+    },
+    {
+      "id": "witness.begin",
+      "bytes": 14462,
+      "durationSeconds": 1.723,
+      "integratedLUFS": -20.9,
+      "truePeakDBTP": -2.44,
+      "sha256": "d86984667899f69a2ce80783701ba29eadd888a26fbc0fd561698953b1a3aea9",
+      "decoded": true
+    },
+    {
+      "id": "ending.witnessed",
+      "bytes": 18642,
+      "durationSeconds": 2.246,
+      "integratedLUFS": -19.42,
+      "truePeakDBTP": -5.08,
+      "sha256": "ac90891a2dd0e34d10a24a125d3f6b9e1377b6f758cdc108722f32c3385fa5ad",
+      "decoded": true
+    },
+    {
+      "id": "ending.refused",
+      "bytes": 20940,
+      "durationSeconds": 2.527,
+      "integratedLUFS": -19.72,
+      "truePeakDBTP": -2.46,
+      "sha256": "572bb6d18ace0393044adb2704d578be2d9520accdb4568a01bd8eca863c5023",
+      "decoded": true
+    }
+  ],
+  "deliveryBytes": 275651,
+  "sourceWavBytes": 1213368,
+  "totalDurationSeconds": 33.531,
+  "humanListeningPerformed": false
+}

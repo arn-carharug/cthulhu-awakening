@@ -164,6 +164,6 @@ Mevcut ortam doğrulaması tamamlandı; kalan insan/çapraz tarayıcı kabulü [
 
 VIII–XV uygulaması sırayla ayrı `main` commitleriyle kaydedildi. Bu dizinin kalan işi XV raporundaki gerçek kullanıcı/dinleme ve çapraz tarayıcı kabul matrisidir.
 
-Kullanıcının sonraki yönlendirmesiyle İngilizce AI anlatıcı ve ileride kullanıcının kendi sesiyle Türkçe anlatım planlandı. Yeni XVI–XIX dizisi: [Anlatıcı planı](NARRATION_PLAN.md). Dört ritüel de **Planlandı** durumunda; kayıt üretimi ve entegrasyon henüz yapılmadı. Yeni dizi XV'in açık kabul maddelerini kapatmış sayılmaz.
+Kullanıcının sonraki yönlendirmesiyle İngilizce AI anlatıcı ve ileride kullanıcının kendi sesiyle Türkçe anlatım eklendi. XVI metin/üretim yolu, XVII gerçek 10 kayıt, XVIII oyun entegrasyonu uygulandı; XIX otomatik ses ölçümü ve in-app tarayıcı doğrulaması tamamlandı. İnsan dinleme ve normal tarayıcı kabulü nedeniyle genel durum **Doğrulama bekliyor**. Raporlar ve kalan maddeler: [Anlatıcı planı](NARRATION_PLAN.md). Yeni dizi XV'in açık kabul maddelerini kapatmış sayılmaz.
 
 Açık dünya, balıkçılık ekonomisi, savaş, crafting, çok oyunculu, motor değişimi ve tam mobil kontrol plan dışında. Önce kısa deneyimin oynanabilirliği ve atmosferi doğrulanacak.
