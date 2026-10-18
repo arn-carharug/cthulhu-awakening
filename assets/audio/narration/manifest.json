@@ -1,0 +1,93 @@
+{
+  "defaultLanguage": "en",
+  "languages": {
+    "en": {
+      "discovery.journal": {
+        "id": "discovery.journal",
+        "text": "The last entry ends mid-sentence: The compass lies near the stones. Keep the pale beacon ahead. If the eyes open, the lantern can bear witness.",
+        "priority": 2,
+        "file": "assets/audio/narration/en/discovery.journal.mp3",
+        "duration": 9.776,
+        "bytes": 79037
+      },
+      "discovery.stone": {
+        "id": "discovery.stone",
+        "text": "A weathered inscription: Three pillars keep the threshold. The sea remembers every visitor. What you choose to illuminate will remember you.",
+        "priority": 2,
+        "file": "assets/audio/narration/en/discovery.stone.mp3",
+        "duration": 8.198,
+        "bytes": 66289
+      },
+      "awakening.rumble": {
+        "id": "awakening.rumble",
+        "text": "Something moves beneath the water.",
+        "priority": 1,
+        "event": "awakening:rumble",
+        "file": "assets/audio/narration/en/awakening.rumble.mp3",
+        "duration": 2.118,
+        "bytes": 17806
+      },
+      "awakening.presence": {
+        "id": "awakening.presence",
+        "text": "You are no longer alone.",
+        "priority": 1,
+        "event": "awakening:presence",
+        "file": "assets/audio/narration/en/awakening.presence.mp3",
+        "duration": 1.659,
+        "bytes": 14044
+      },
+      "awakening.silhouette": {
+        "id": "awakening.silhouette",
+        "text": "A shape eclipses the horizon.",
+        "priority": 1,
+        "event": "awakening:silhouette",
+        "file": "assets/audio/narration/en/awakening.silhouette.mp3",
+        "duration": 2.527,
+        "bytes": 20940
+      },
+      "awakening.eyes": {
+        "id": "awakening.eyes",
+        "text": "It sees you.",
+        "priority": 1,
+        "event": "awakening:eyes",
+        "file": "assets/audio/narration/en/awakening.eyes.mp3",
+        "duration": 1.008,
+        "bytes": 8820
+      },
+      "awakening.reveal": {
+        "id": "awakening.reveal",
+        "text": "Cthulhu awakens.",
+        "priority": 1,
+        "event": "awakening:reveal",
+        "file": "assets/audio/narration/en/awakening.reveal.mp3",
+        "duration": 1.749,
+        "bytes": 14671
+      },
+      "witness.begin": {
+        "id": "witness.begin",
+        "text": "Let the light bear witness.",
+        "priority": 1,
+        "event": "timeline:complete",
+        "file": "assets/audio/narration/en/witness.begin.mp3",
+        "duration": 1.723,
+        "bytes": 14462
+      },
+      "ending.witnessed": {
+        "id": "ending.witnessed",
+        "text": "The sea remembers. So do you.",
+        "priority": 3,
+        "file": "assets/audio/narration/en/ending.witnessed.mp3",
+        "duration": 2.246,
+        "bytes": 18642
+      },
+      "ending.refused": {
+        "id": "ending.refused",
+        "text": "The sea lets you pass. For now.",
+        "priority": 3,
+        "file": "assets/audio/narration/en/ending.refused.mp3",
+        "duration": 2.527,
+        "bytes": 20940
+      }
+    }
+  }
+}

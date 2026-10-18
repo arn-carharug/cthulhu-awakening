@@ -1,6 +1,6 @@
 # Ritüel XVI — Derinden Gelen Ses
 
-Durum: Metin ve üretim yolu belirlendi; örnek üretimi XVII ile yürütülüyor.
+Durum: Uygulama tamamlandı. Metin, üretim yolu ve ses karakteri belirlendi. Örnek kayıtlar XVII paketinde üretildi; insan dinleme değerlendirmesi XIX'te açık.
 
 Kullanıcının “devam et, sorma” yönlendirmesi, önceki plandaki örnek seçimi için bekleme adımını kaldırdı. Ses karakteri uygulama sırasında seçilecek; insan dinleme onayı verilmiş sayılmayacak.
 
