@@ -1,0 +1,12 @@
+[
+  {"id":"discovery.journal","text":"The last entry ends mid-sentence: The compass lies near the stones. Keep the pale beacon ahead. If the eyes open, the lantern can bear witness.","priority":2},
+  {"id":"discovery.stone","text":"A weathered inscription: Three pillars keep the threshold. The sea remembers every visitor. What you choose to illuminate will remember you.","priority":2},
+  {"id":"awakening.rumble","text":"Something moves beneath the water.","priority":1,"event":"awakening:rumble","maxSeconds":10},
+  {"id":"awakening.presence","text":"You are no longer alone.","priority":1,"event":"awakening:presence","maxSeconds":4.8},
+  {"id":"awakening.silhouette","text":"A shape eclipses the horizon.","priority":1,"event":"awakening:silhouette","maxSeconds":9.8},
+  {"id":"awakening.eyes","text":"It sees you.","priority":1,"event":"awakening:eyes","maxSeconds":6.8},
+  {"id":"awakening.reveal","text":"Cthulhu awakens.","spoken":"Kuh thoo loo awakens.","priority":1,"event":"awakening:reveal","maxSeconds":5.8},
+  {"id":"witness.begin","text":"Let the light bear witness.","priority":1,"event":"timeline:complete"},
+  {"id":"ending.witnessed","text":"The sea remembers. So do you.","priority":3},
+  {"id":"ending.refused","text":"The sea lets you pass. For now.","priority":3}
+]
