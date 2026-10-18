@@ -1,0 +1,279 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { test } = require('node:test');
+
+const root = path.resolve(__dirname, '..');
+
+// Run the actual scene modules and event handlers, replacing only DOM/audio/GPU
+// boundaries. This checks state integration without pretending to render WebGL.
+function createScene() {
+    const listeners = new Map();
+    const elements = new Map();
+    const documentListeners = new Map();
+    function element(id, tagName = 'DIV') {
+        const handlers = new Map();
+        const classes = new Set();
+        return {
+            id, tagName, hidden: ['pause-screen', 'ending-card', 'witness-focus', 'input-status'].includes(id),
+            textContent: '', value: '', dataset: {}, style: { setProperty() {} },
+            classList: {
+                add: (name) => classes.add(name), remove: (name) => classes.delete(name),
+                contains: (name) => classes.has(name),
+                toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); }
+            },
+            addEventListener: (name, fn) => handlers.set(name, fn),
+            click() { handlers.get('click')?.({ target: this, stopPropagation() {} }); },
+            closest() { return ['BUTTON', 'INPUT', 'SELECT'].includes(this.tagName) ? this : null; },
+            setAttribute() {},
+            focus() { document.activeElement = this; dispatch(documentListeners, 'focusin', { target: this }); },
+            querySelector: (selector) => get(`${id}:${selector}`),
+            querySelectorAll: () => id === 'pause-screen' ? [get('pause-resume')]
+                : id === 'ending-card' ? [get('ending-continue'), get('ending-restart')] : [],
+            requestPointerLock() { document.pointerLockElement = this; dispatch(documentListeners, 'pointerlockchange'); return Promise.resolve(); }
+        };
+    }
+    function get(id) {
+        if (!elements.has(id)) elements.set(id, element(id,
+            /^(ending-(continue|restart)|pause-(resume|toggle)|sound-toggle)$/.test(id) ? 'BUTTON'
+                : id === 'volume-control' ? 'INPUT' : 'DIV'));
+        return elements.get(id);
+    }
+    function add(map, name, fn) {
+        if (!map.has(name)) map.set(name, []);
+        map.get(name).push(fn);
+    }
+    function dispatch(map, name, props = {}) {
+        const event = { key: '', repeat: false, target: document.activeElement,
+            preventDefault() {}, ...props };
+        for (const fn of map.get(name) || []) fn(event);
+    }
+    const objectives = ['compass', 'rlyeh', 'lantern', 'witness'].map((id) => {
+        const item = get(`objective-${id}`);
+        item.dataset.objective = id;
+        return item;
+    });
+    const document = {
+        hidden: false, activeElement: null, pointerLockElement: null,
+        getElementById: get, querySelector: get, querySelectorAll: () => objectives,
+        addEventListener: (name, fn) => add(documentListeners, name, fn),
+        exitPointerLock() { this.pointerLockElement = null; dispatch(documentListeners, 'pointerlockchange'); }
+    };
+    document.activeElement = get('glCanvas');
+    const vector = {
+        create: () => [0, 0, 0], fromValues: (...v) => v,
+        add(out, a, b) { for (let i = 0; i < 3; i++) out[i] = a[i] + b[i]; return out; }
+    };
+    const context = vm.createContext({
+        console, document, performance: { now: () => 0 },
+        navigator: { userAgent: 'Node DOM test harness; no real browser' },
+        localStorage: { getItem: () => null, setItem() {} },
+        glMatrix: { vec3: vector, vec4: vector, mat4: { create: () => [] } },
+        requestAnimationFrame() {},
+        addEventListener: (name, fn) => add(listeners, name, fn)
+    });
+    context.window = context;
+    for (const file of ['config', 'timeline', 'scene-controls', 'performance-monitor',
+        'audio-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
+        vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
+    }
+    const source = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
+    // Omit automatic GPU startup; all production handlers/functions remain intact.
+    vm.runInContext(source.slice(0, source.lastIndexOf('\nmain().catch')) + `
+        STATE.canvas = document.getElementById('glCanvas');
+        STATE.performanceMonitor = new PerformanceMonitor(null);
+        globalThis.scene = { STATE, sceneControls, ritualCycle, ritualPresentation, ritualAudio,
+            sceneEvents, resetScene, advanceScene, setScenePaused, requestScenePointerLock,
+            inspect: () => { compassInspectedOnce = true; },
+            uninspect: () => { compassInspectedOnce = false; } };
+    `, context);
+    return { ...context.scene, get, document, context,
+        key: (key, options) => dispatch(listeners, 'keydown', { key, ...options }),
+        keyup: (key) => dispatch(listeners, 'keyup', { key }),
+        blur: () => dispatch(listeners, 'blur'),
+        visibility(hidden) { document.hidden = hidden; dispatch(documentListeners, 'visibilitychange'); }
+    };
+}
+
+test('five-second movement is equal at 30, 60, and 120 FPS; diagonals are normalized', () => {
+    for (const fps of [30, 60, 120]) {
+        for (const keys of [['w'], ['w', 'd']]) {
+            const scene = createScene();
+            scene.inspect();
+            keys.forEach((key) => scene.key(key));
+            scene.advanceScene(0);
+            for (let frame = 1; frame <= fps * 5; frame++) scene.advanceScene(frame * 1000 / fps);
+            const [x, , z] = scene.STATE.shipPosition;
+            assert.ok(Math.abs(Math.hypot(x - 10, z - 60) - 45) < 1e-8);
+            assert.ok(Math.abs(scene.ritualCycle.elapsedSeconds - 5) < 1e-8);
+        }
+    }
+});
+
+test('key release, opposite inputs, UI focus, and compass/awakening gates stop movement', () => {
+    const scene = createScene();
+    scene.key('w');
+    assert.equal(scene.sceneControls.keys.size, 0);
+    scene.inspect();
+    scene.key('w');
+    scene.keyup('W');
+    assert.equal(scene.sceneControls.keys.size, 0);
+    scene.key('w'); scene.key('s');
+    assert.equal(Math.hypot(...scene.sceneControls.movement([0, 0, -1], 9, 1)), 0);
+    scene.get('volume-control').focus();
+    scene.key('w');
+    assert.equal(scene.sceneControls.keys.size, 0);
+    scene.get('glCanvas').focus();
+    scene.key('w'); scene.STATE.awakeningStarted = true;
+    scene.advanceScene(0); scene.advanceScene(100);
+    assert.equal(scene.STATE.shipPosition[2], 60);
+});
+
+test('blur clears held inputs, releases pointer lock, and pauses scene/audio', () => {
+    const scene = createScene();
+    scene.inspect(); scene.key('w'); scene.requestScenePointerLock(); scene.key('w');
+    scene.advanceScene(0); scene.advanceScene(100);
+    scene.blur();
+    assert.equal(scene.sceneControls.keys.size, 0);
+    assert.equal(scene.document.pointerLockElement, null);
+    assert.equal(scene.STATE.paused, true);
+    assert.equal(scene.ritualAudio.paused, true);
+    assert.equal(scene.get('pause-screen').hidden, false);
+    const elapsed = scene.ritualCycle.elapsedSeconds;
+    scene.advanceScene(10000);
+    assert.equal(scene.ritualCycle.elapsedSeconds, elapsed);
+});
+
+test('hidden time never advances the scene, cycle, captions, or ending countdown', () => {
+    const scene = createScene();
+    scene.ritualPresentation.show('Test caption', 1000);
+    scene.ritualPresentation.completeWitness();
+    scene.advanceScene(0); scene.advanceScene(100);
+    const elapsed = scene.ritualCycle.elapsedSeconds;
+    const remaining = scene.ritualPresentation.endingTimer;
+    scene.visibility(true);
+    scene.advanceScene(60000);
+    scene.setScenePaused(false);
+    assert.equal(scene.STATE.paused, true, 'cannot resume a hidden scene');
+    assert.equal(scene.ritualCycle.elapsedSeconds, elapsed);
+    assert.equal(scene.ritualPresentation.endingTimer, remaining);
+    scene.visibility(false);
+    assert.equal(scene.STATE.paused, true, 'returning requires deliberate resume');
+    scene.get('pause-resume').click();
+    scene.advanceScene(61000); scene.advanceScene(61100);
+    assert.ok(Math.abs(scene.ritualCycle.elapsedSeconds - elapsed - 0.1) < 1e-8);
+    assert.equal(scene.ritualAudio.paused, false);
+});
+
+test('ending releases mouse and focuses usable buttons; Tab stays in dialog', () => {
+    const scene = createScene();
+    scene.requestScenePointerLock();
+    scene.ritualPresentation.completeWitness();
+    scene.advanceScene(0);
+    for (let frame = 1; frame <= 10; frame++) scene.advanceScene(frame * 100);
+    assert.equal(scene.get('ending-card').hidden, false);
+    assert.equal(scene.get('pause-screen').hidden, true);
+    assert.equal(scene.STATE.paused, true);
+    assert.equal(scene.document.pointerLockElement, null);
+    assert.equal(scene.document.activeElement.id, 'ending-continue');
+    scene.key('Tab');
+    assert.equal(scene.document.activeElement.id, 'ending-restart');
+    scene.key('Tab');
+    assert.equal(scene.document.activeElement.id, 'ending-continue');
+    scene.get('ending-continue').click();
+    assert.equal(scene.STATE.paused, false);
+    assert.equal(scene.document.pointerLockElement, scene.STATE.canvas);
+});
+
+test('ten resets clear inspection, captions, and pending endings without advancing cycle', () => {
+    const scene = createScene();
+    for (let run = 0; run < 10; run++) {
+        scene.STATE.compassYaw = 3;
+        scene.STATE.compassPitch = -1;
+        scene.STATE.compassInspectMode = true;
+        scene.STATE.compassHovered = true;
+        scene.STATE.torchLit = true;
+        scene.ritualPresentation.show('Old cycle', 3000);
+        scene.ritualPresentation.completeWitness();
+        scene.resetScene();
+        assert.equal(scene.STATE.compassYaw, 0);
+        assert.equal(scene.STATE.compassPitch, 0);
+        assert.equal(scene.STATE.compassInspectMode, false);
+        assert.equal(scene.STATE.compassHovered, false);
+        assert.equal(scene.STATE.torchLit, false);
+        assert.equal(scene.ritualCycle.cycle, 1);
+        assert.equal(scene.ritualCycle.elapsedSeconds, 0);
+        scene.advanceScene(run * 2000);
+        scene.advanceScene(run * 2000 + 1500);
+        assert.equal(scene.get('ending-card').hidden, true);
+        assert.equal(scene.get('ritual-caption').textContent, '');
+    }
+    scene.get('ending-restart').click();
+    assert.equal(scene.ritualCycle.cycle, 2);
+});
+
+test('R repetition does not reset repeatedly; buttons retain native keyboard actions', () => {
+    const scene = createScene();
+    scene.STATE.compassYaw = 1;
+    scene.key('r', { repeat: true });
+    assert.equal(scene.STATE.compassYaw, 1);
+    scene.key('r');
+    assert.equal(scene.STATE.compassYaw, 0);
+    scene.STATE.compassYaw = 2;
+    scene.get('sound-toggle').focus(); scene.key('r');
+    assert.equal(scene.STATE.compassYaw, 2);
+});
+
+test('pointer-lock rejection has visible feedback and successful retry clears it', async () => {
+    const scene = createScene();
+    const request = scene.STATE.canvas.requestPointerLock;
+    scene.STATE.canvas.requestPointerLock = () => Promise.reject(new Error('denied'));
+    scene.requestScenePointerLock();
+    await Promise.resolve();
+    assert.equal(scene.get('input-status').hidden, false);
+    scene.STATE.canvas.requestPointerLock = request;
+    scene.requestScenePointerLock();
+    assert.equal(scene.get('input-status').hidden, true);
+});
+
+test('performance reports raw 250ms frames while simulation advances only 100ms', () => {
+    const scene = createScene();
+    scene.advanceScene(0); scene.advanceScene(250); scene.advanceScene(500);
+    const snapshot = scene.STATE.performanceMonitor.snapshot();
+    assert.equal(snapshot.fps, 4);
+    assert.equal(snapshot.p95FrameMs, 250);
+    assert.equal(scene.ritualCycle.elapsedSeconds, 0.2);
+    scene.ritualCycle.finish();
+    scene.ritualCycle.update(10);
+    assert.equal(scene.ritualCycle.elapsedSeconds, 0.2, 'finished stats stay frozen');
+});
+
+test('audio reset and pause stop scheduled one-shot sounds and cancel rumble envelopes', () => {
+    const scene = createScene();
+    const audio = scene.ritualAudio;
+    const calls = [];
+    const parameter = () => ({
+        cancelScheduledValues: () => calls.push('cancel'),
+        setTargetAtTime: (value) => calls.push(value)
+    });
+    audio.context = { currentTime: 1 };
+    audio.master = { gain: parameter() };
+    audio.rumble = { frequency: parameter() };
+    audio.rumbleGain = { gain: parameter() };
+    audio.windGain = { gain: parameter() };
+    const sound = () => ({ stop: () => calls.push('stop') });
+    audio.transients.add(sound());
+    audio.reset();
+    assert.equal(audio.transients.size, 0);
+    assert.equal(calls.filter((value) => value === 'stop').length, 1);
+    assert.equal(calls.filter((value) => value === 'cancel').length, 3);
+    audio.transients.add(sound());
+    audio.setPaused(true);
+    assert.equal(audio.transients.size, 0);
+    assert.equal(calls.at(-1), 0);
+    audio.setVolume(1);
+    assert.equal(calls.at(-1), 0, 'volume cannot unmute a paused scene');
+    audio.setPaused(false);
+    assert.equal(calls.at(-1), audio.outputGain());
+});

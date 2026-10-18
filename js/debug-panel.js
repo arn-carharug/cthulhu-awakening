@@ -18,7 +18,19 @@
     document.getElementById('debug-awaken').addEventListener('click', () => {
         global.dispatchEvent(new CustomEvent('scene:awaken'));
     });
+    document.getElementById('debug-measure').addEventListener('click', () => {
+        const output = document.getElementById('debug-measurements');
+        output.textContent = JSON.stringify(global.getSceneDiagnostics(), null, 2);
+        output.hidden = false;
+    });
     global.addEventListener('keydown', (event) => {
-        if (event.key === 'F2') panel.hidden = !panel.hidden;
+        if (event.key === 'F2' && !event.repeat) {
+            if (!document.getElementById('pause-screen').hidden || !document.getElementById('ending-card').hidden) return;
+            panel.hidden = !panel.hidden;
+            if (!panel.hidden) {
+                if (document.pointerLockElement) document.exitPointerLock();
+                quality.focus();
+            }
+        }
     });
 }(window));

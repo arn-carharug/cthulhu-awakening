@@ -9,6 +9,8 @@
             this.windGain = null;
             this.enabled = false;
             this.muted = false;
+            this.paused = false;
+            this.transients = new Set();
             this.volume = 0.7;
             this.onStateChange = null;
         }
@@ -20,7 +22,7 @@
             this.enabled = true;
             this.muted = false;
             this.master.gain.cancelScheduledValues(this.context.currentTime);
-            this.master.gain.setTargetAtTime(this.outputGain(), this.context.currentTime, 0.35);
+            this.master.gain.setTargetAtTime(this.paused ? 0 : this.outputGain(), this.context.currentTime, 0.35);
             this.emitState();
             return true;
         }
@@ -77,7 +79,7 @@
         }
 
         setAwakening(progress) {
-            if (!this.enabled || this.muted) return;
+            if (!this.enabled || this.muted || this.paused) return;
             const now = this.context.currentTime;
             this.rumble.frequency.setTargetAtTime(52 + progress * 26, now, 0.8);
             this.rumbleGain.gain.setTargetAtTime(0.035 + progress * 0.22, now, 0.6);
@@ -85,7 +87,7 @@
         }
 
         cue(name) {
-            if (!this.enabled || this.muted) return;
+            if (!this.enabled || this.muted || this.paused) return;
             if (name === 'awakening:rumble' || name === 'awakening:presence') this.pulseRumble(name === 'awakening:presence' ? 0.5 : 0.28);
             if (name === 'awakening:flash' || name === 'awakening:reveal') this.thunder(name === 'awakening:reveal' ? 0.7 : 0.46);
             if (name === 'awakening:eyes') this.heartbeat();
@@ -113,6 +115,7 @@
             gain.gain.linearRampToValueAtTime(amount, now + 0.035);
             gain.gain.exponentialRampToValueAtTime(0.001, now + 2.7);
             source.connect(filter).connect(gain).connect(this.master);
+            this.trackTransient(source, [filter, gain]);
             source.start(now);
             source.stop(now + 2.8);
         }
@@ -128,6 +131,7 @@
                 gain.gain.linearRampToValueAtTime(index % 2 ? 0.11 : 0.19, now + offset + 0.035);
                 gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.24);
                 oscillator.connect(gain).connect(this.master);
+                this.trackTransient(oscillator, [gain]);
                 oscillator.start(now + offset);
                 oscillator.stop(now + offset + 0.25);
             });
@@ -136,14 +140,14 @@
         toggle() {
             if (!this.context || !this.enabled) return this.enable();
             this.muted = !this.muted;
-            this.master.gain.setTargetAtTime(this.muted ? 0 : this.outputGain(), this.context.currentTime, 0.08);
+            this.master.gain.setTargetAtTime(this.muted || this.paused ? 0 : this.outputGain(), this.context.currentTime, 0.08);
             this.emitState();
             return Promise.resolve(!this.muted);
         }
 
         setVolume(value) {
             this.volume = Math.max(0, Math.min(1, Number(value) || 0));
-            if (this.context && this.master && !this.muted) {
+            if (this.context && this.master && !this.muted && !this.paused) {
                 this.master.gain.setTargetAtTime(this.outputGain(), this.context.currentTime, 0.05);
             }
             this.emitState();
@@ -157,10 +161,40 @@
 
         reset() {
             if (!this.context) return;
+            this.stopTransients();
             const now = this.context.currentTime;
+            [this.rumble.frequency, this.rumbleGain.gain, this.windGain.gain]
+                .forEach((parameter) => parameter.cancelScheduledValues(now));
             this.rumble.frequency.setTargetAtTime(52, now, 0.2);
             this.rumbleGain.gain.setTargetAtTime(0.035, now, 0.25);
             this.windGain.gain.setTargetAtTime(0.24, now, 0.4);
+        }
+
+        trackTransient(source, nodes) {
+            this.transients.add(source);
+            source.onended = () => {
+                this.transients.delete(source);
+                source.disconnect();
+                nodes.forEach((node) => node.disconnect());
+            };
+        }
+
+        stopTransients() {
+            for (const source of this.transients) {
+                try { source.stop(); } catch (error) {
+                    if (error.name !== 'InvalidStateError') throw error;
+                }
+            }
+            this.transients.clear();
+        }
+
+        setPaused(paused) {
+            this.paused = paused;
+            if (!this.context) return;
+            if (paused) this.stopTransients();
+            const now = this.context.currentTime;
+            this.master.gain.cancelScheduledValues(now);
+            this.master.gain.setTargetAtTime(paused || this.muted ? 0 : this.outputGain(), now, 0.03);
         }
 
         emitState() {

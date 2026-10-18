@@ -28,7 +28,8 @@
         start(advanceCycle = true) {
             if (advanceCycle) this.cycle += 1;
             this.completed = new Set();
-            this.startedAt = performance.now();
+            this.elapsedSeconds = 0;
+            this.finished = false;
             this.witnessLitTime = 0;
             this.witnessLockedTime = 0;
             this.currentStreak = 0;
@@ -40,6 +41,10 @@
             if (!OBJECTIVES.includes(id) || this.completed.has(id)) return;
             this.completed.add(id);
             this.render();
+        }
+
+        update(deltaSeconds) {
+            if (!this.finished) this.elapsedSeconds += deltaSeconds;
         }
 
         updateWitness(deltaSeconds, locked, torchLit) {
@@ -58,7 +63,8 @@
         }
 
         finish() {
-            const elapsedSeconds = Math.max(0, (performance.now() - this.startedAt) / 1000);
+            this.finished = true;
+            const elapsedSeconds = this.elapsedSeconds;
             const minutes = Math.floor(elapsedSeconds / 60);
             const seconds = Math.floor(elapsedSeconds % 60).toString().padStart(2, '0');
             const focus = this.witnessLitTime > 0

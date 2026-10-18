@@ -4,6 +4,7 @@ const {
     awakening: awakeningConfig, torch: torchConfig, ocean: oceanConfig
 } = window.GameConfig;
 const sceneEvents = new window.SceneRuntime.EventBus();
+const sceneControls = new window.SceneControls();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents);
 const ritualCycle = new window.RitualCycle(sceneEvents);
@@ -45,7 +46,7 @@ const STATE = {
     shipIndexCount: 0,
     cameraFront: glMatrix.vec3.fromValues(0, 0, -1),
     cameraUp: glMatrix.vec3.fromValues(0, 1, 0),
-    cameraSpeed: 0.3,
+    cameraSpeed: 9, // World units per active second.
     yaw: -90,
     pitch: 0,
     firstMouse: true,
@@ -90,6 +91,7 @@ const STATE = {
     waterVAO: null,
     waterIndexCount: 0,
     lastFrameTime: 0,
+    paused: false,
     quality: defaultQuality,
     effects: {
         lighting: true, pbr: true, animation: true,
@@ -158,11 +160,75 @@ volumeControl.addEventListener('input', () => {
     ritualAudio.setVolume(percentage / 100);
     try { localStorage.setItem('ritual-volume', String(percentage)); } catch { /* optional */ }
 });
-document.getElementById('ending-restart').addEventListener('click', () => resetScene());
+document.getElementById('ending-restart').addEventListener('click', () => {
+    resetScene(true);
+    requestScenePointerLock();
+});
 document.getElementById('ending-continue').addEventListener('click', () => {
     ritualPresentation.dismissEnding();
-    STATE.canvas?.requestPointerLock?.();
+    setScenePaused(false);
+    requestScenePointerLock();
 });
+document.getElementById('pause-toggle').addEventListener('click', () => setScenePaused(true));
+document.getElementById('pause-resume').addEventListener('click', () => {
+    setScenePaused(false);
+    requestScenePointerLock();
+});
+sceneEvents.on('ending:shown', () => setScenePaused(true, false));
+
+function isInterfaceTarget(target) {
+    return Boolean(target?.closest?.('button, input, select, textarea, a, [contenteditable="true"], [role="dialog"]'));
+}
+
+function releaseScenePointerLock() {
+    if (document.pointerLockElement === STATE.canvas) document.exitPointerLock();
+}
+
+function reportPointerLockError() {
+    const status = document.getElementById('input-status');
+    status.textContent = 'Mouse capture was unavailable. Click the scene to try again.';
+    status.hidden = false;
+}
+
+function requestScenePointerLock() {
+    if (!STATE.canvas || STATE.paused) return;
+    STATE.canvas.focus();
+    if (document.pointerLockElement === STATE.canvas) return;
+    try {
+        if (!STATE.canvas.requestPointerLock) return reportPointerLockError();
+        const request = STATE.canvas.requestPointerLock();
+        request?.catch(reportPointerLockError);
+    } catch {
+        reportPointerLockError();
+    }
+}
+
+function setScenePaused(paused, showScreen = true) {
+    if (!paused && (document.hidden || !ritualPresentation.ending.hidden)) return;
+    STATE.paused = paused;
+    sceneControls.clear();
+    STATE.firstMouse = true;
+    ritualAudio.setPaused(paused);
+    document.getElementById('pause-screen').hidden = !paused || !showScreen;
+    if (paused) {
+        document.getElementById('debug-panel').hidden = true;
+        releaseScenePointerLock();
+        if (showScreen) document.getElementById('pause-resume').focus();
+    }
+}
+
+window.addEventListener('blur', () => {
+    if (STATE.canvas && ritualPresentation.ending.hidden) setScenePaused(true);
+    else sceneControls.clear();
+});
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) setScenePaused(true, ritualPresentation.ending.hidden);
+});
+document.addEventListener('focusin', (event) => {
+    if (isInterfaceTarget(event.target)) sceneControls.keys.clear();
+});
+window.addEventListener('keyup', (event) => sceneControls.keys.delete(event.key.toLowerCase()));
+document.addEventListener('pointerlockerror', reportPointerLockError);
 // Add right after STATE:
 let pillarsRiseY = 0;
 // Water Plane (2D Quad) - Position, Normal, Color, UV
@@ -295,7 +361,7 @@ function getTorchPosition() {
 
 // Mouse/keyboard events: camera and torch hover
 window.addEventListener("mousemove", (event) => {
-    if (document.pointerLockElement !== STATE.canvas) return;
+    if (STATE.paused || document.pointerLockElement !== STATE.canvas) return;
 
     // Skip first mouse move after pointer lock (avoid camera jump)
     if (STATE.firstMouse) {
@@ -384,6 +450,7 @@ window.addEventListener("mousemove", (event) => {
 //--------------------------------------------------------------------------------------------------------------------------------//
 // 4. MOUSE SCROLL: Adjust torch brightness
 window.addEventListener('wheel', (e) => {
+    if (STATE.paused || isInterfaceTarget(e.target)) return;
     if (STATE.torchLit && STATE.torchControlMode) {
         STATE.torchLightIntensity += (e.deltaY < 0 ? 0.25 : -0.25);
         STATE.torchLightIntensity = Math.max(STATE.minTorch, Math.min(STATE.maxTorch, STATE.torchLightIntensity));
@@ -392,14 +459,30 @@ window.addEventListener('wheel', (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
-
-    if (e.key.toLowerCase() === 'r') {
-        resetScene();
+    const key = e.key.toLowerCase();
+    const modal = !document.getElementById('pause-screen').hidden
+        ? document.getElementById('pause-screen') : !ritualPresentation.ending.hidden ? ritualPresentation.ending : null;
+    if (modal && key === 'tab') {
+        const buttons = [...modal.querySelectorAll('button')];
+        const index = buttons.indexOf(document.activeElement);
+        buttons[(index + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+        e.preventDefault();
         return;
     }
+    if (key === 'p' && !e.repeat && (!isInterfaceTarget(e.target) || e.target.id === 'pause-resume')) {
+        setScenePaused(!STATE.paused);
+        if (!STATE.paused) requestScenePointerLock();
+        return;
+    }
+    if (isInterfaceTarget(e.target) && !(STATE.paused && key === 'r' && e.target.id === 'pause-resume')) return;
+    if (e.key.toLowerCase() === 'r') {
+        if (!e.repeat) resetScene();
+        return;
+    }
+    if (STATE.paused) return;
 
     if (e.key.toLowerCase() === 'n') {
-        ritualAudio.toggle();
+        if (!e.repeat) ritualAudio.toggle();
         return;
     }
 
@@ -425,7 +508,7 @@ window.addEventListener("keydown", (e) => {
     }
 
     // Toggle FPS torch mode with "M"
-    if (e.key.toLowerCase() === "m" && STATE.torchLit) {
+    if (e.key.toLowerCase() === "m" && STATE.torchLit && !e.repeat) {
         STATE.torchControlMode = !STATE.torchControlMode;
         document.getElementById("torch-mode").textContent = STATE.torchControlMode ? "ON" : "OFF";
         return;
@@ -437,51 +520,20 @@ window.addEventListener("keydown", (e) => {
     }
 
     if (!compassInspectedOnce || STATE.awakeningStarted) return;
-    const direction = STATE.vec3.create();
-    switch (e.key.toLowerCase()) {
-        case "w": {
-            // Zero cameraFront Y, normalize
-            const forward = STATE.vec3.clone(STATE.cameraFront);
-            forward[1] = 0;
-            STATE.vec3.normalize(forward, forward);
-            STATE.vec3.scale(direction, forward, STATE.cameraSpeed);
-            STATE.vec3.add(STATE.shipPosition, STATE.shipPosition, direction);
-            break;
-        }
-        case "s": {
-            const forward = STATE.vec3.clone(STATE.cameraFront);
-            forward[1] = 0;
-            STATE.vec3.normalize(forward, forward);
-            STATE.vec3.scale(direction, forward, STATE.cameraSpeed);
-            STATE.vec3.sub(STATE.shipPosition, STATE.shipPosition, direction);
-            break;
-        }
-        case "a": {
-            const right = STATE.vec3.create();
-            // Use [0,1,0] as up for surface-right vector
-            STATE.vec3.cross(right, STATE.cameraFront, [0, 1, 0]);
-            STATE.vec3.normalize(right, right);
-            STATE.vec3.scale(right, right, STATE.cameraSpeed);
-            STATE.vec3.sub(STATE.shipPosition, STATE.shipPosition, right);
-            break;
-        }
-        case "d": {
-            const right = STATE.vec3.create();
-            STATE.vec3.cross(right, STATE.cameraFront, [0, 1, 0]);
-            STATE.vec3.normalize(right, right);
-            STATE.vec3.scale(right, right, STATE.cameraSpeed);
-            STATE.vec3.add(STATE.shipPosition, STATE.shipPosition, right);
-            break;
-        }
+    if (['w', 'a', 's', 'd'].includes(key)) {
+        sceneControls.keys.add(key);
+        e.preventDefault();
     }
 
 });
 
 document.addEventListener("pointerlockchange", () => {
-    if (document.pointerLockElement !== STATE.canvas) STATE.firstMouse = true;
+    sceneControls.keys.clear();
+    STATE.firstMouse = true;
+    if (document.pointerLockElement === STATE.canvas) document.getElementById('input-status').hidden = true;
 });
 
-window.addEventListener('scene:reset', resetScene);
+window.addEventListener('scene:reset', () => resetScene());
 window.addEventListener('scene:awaken', startAwakening);
 window.addEventListener('scene:quality', (event) => {
     const quality = event.detail.quality;
@@ -807,6 +859,8 @@ async function main() {
 
     // Canvas eventleri vs. aynı kalacak...
     STATE.canvas.addEventListener("click", (event) => {
+        if (STATE.paused) return;
+        STATE.canvas.focus();
         if (!ritualAudio.enabled) ritualAudio.enable();
         let interactionHandled = false;
 
@@ -853,13 +907,14 @@ async function main() {
         }
 
         if (!interactionHandled && document.pointerLockElement !== STATE.canvas) {
-            STATE.canvas.requestPointerLock();
+            requestScenePointerLock();
         }
     });
 
 
 
     STATE.performanceMonitor = new window.PerformanceMonitor(document.getElementById("performance-stats"));
+    STATE.initialLoadMs = performance.now();
     document.getElementById("loading-screen").hidden = true;
     drawScene(performance.now());
 }
@@ -939,7 +994,8 @@ function isLookingAtRlyeh() {
     return false;
 }
 
-function resetScene() {
+function resetScene(advanceCycle = false) {
+    sceneControls.clear();
     STATE.awakeningStarted = false;
     STATE.cthulhuRiseY = 0;
     STATE.torchLit = false;
@@ -952,6 +1008,9 @@ function resetScene() {
     STATE.torchControlMode = false;
     STATE.compassInspectMode = false;
     compassInspectedOnce = false;
+    STATE.compassYaw = 0;
+    STATE.compassPitch = 0;
+    STATE.compassHovered = false;
     STATE.yaw = -90;
     STATE.pitch = 0;
     STATE.firstMouse = true;
@@ -966,17 +1025,20 @@ function resetScene() {
     STATE.awakeningTimeline.reset();
     ritualAudio.reset();
     ritualPresentation.reset();
-    ritualCycle.start(true);
+    ritualCycle.start(advanceCycle);
     STATE.omen = omenSystem.beginCycle(ritualCycle.cycle);
     ritualCycle.setOmen(STATE.omen.label);
     STATE.lightning.setProfile({ intervalScale: STATE.omen.lightningInterval });
     document.getElementById("torch-mode").textContent = "OFF";
     document.getElementById("torch-brightness").textContent = "0.00";
     window.showCompassWarning?.();
+    document.getElementById('input-status').hidden = true;
+    setScenePaused(document.hidden);
+    if (!STATE.paused) STATE.canvas?.focus();
 }
 
 function startAwakening() {
-    if (STATE.awakeningStarted) return;
+    if (STATE.paused || STATE.awakeningStarted) return;
     STATE.awakeningStarted = true;
     STATE.awakeningTimeline.start();
     sceneEvents.emit('awakening:started');
@@ -1105,13 +1167,41 @@ function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
     }
 }
 
+function advanceScene(timestamp) {
+    const { rawSeconds, deltaSeconds } = sceneControls.tick(timestamp, STATE.paused);
+    STATE.lastFrameTime = timestamp;
+    if (STATE.paused) return 0;
+    STATE.elapsedTime += deltaSeconds;
+    STATE.performanceMonitor?.update(rawSeconds);
+    ritualCycle.update(deltaSeconds);
+    ritualPresentation.update(deltaSeconds);
+    if (!compassInspectedOnce || STATE.awakeningStarted || STATE.compassInspectMode || isInterfaceTarget(document.activeElement)) {
+        sceneControls.keys.clear();
+    } else {
+        const movement = sceneControls.movement(STATE.cameraFront, STATE.cameraSpeed, deltaSeconds);
+        STATE.vec3.add(STATE.shipPosition, STATE.shipPosition, movement);
+    }
+    return deltaSeconds;
+}
+
+window.getSceneDiagnostics = () => ({
+    browser: navigator.userAgent,
+    viewport: { width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio },
+    renderSize: { width: STATE.canvas?.width, height: STATE.canvas?.height },
+    quality: STATE.quality,
+    initialLoadMs: STATE.initialLoadMs ?? null,
+    paused: STATE.paused,
+    performance: STATE.performanceMonitor?.snapshot() ?? null
+});
+
 function drawScene(timestamp) {
     const gl = STATE.gl;
     resizeCanvas();
-    const deltaSeconds = Math.min((timestamp - STATE.lastFrameTime) / 1000, 0.1) || 0;
-    STATE.lastFrameTime = timestamp;
-    STATE.elapsedTime += deltaSeconds;
-    STATE.performanceMonitor?.update(deltaSeconds);
+    const deltaSeconds = advanceScene(timestamp);
+    if (STATE.paused) {
+        requestAnimationFrame(drawScene);
+        return;
+    }
     STATE.cinematic.shake = Math.max(0, STATE.cinematic.shake - deltaSeconds * 0.22);
     STATE.cinematic.torchShock = Math.max(0, STATE.cinematic.torchShock - deltaSeconds * 0.38);
     if (STATE.effects.animation) STATE.awakeningTimeline.update(deltaSeconds);

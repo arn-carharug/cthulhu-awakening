@@ -133,6 +133,13 @@
     <div id="cinematic-overlay" aria-hidden="true"></div>
     <div id="ritual-progress" aria-hidden="true"><span></span></div>
     <p id="ritual-caption" role="status" aria-live="polite"></p>
+    <p id="input-status" role="status" hidden></p>
+    <section id="pause-screen" hidden aria-labelledby="pause-title" role="dialog" aria-modal="true">
+      <h1 id="pause-title">The sea waits</h1>
+      <p>Paused. Resume when you are ready.</p>
+      <button id="pause-resume" type="button">Resume</button>
+      <p>R retries this cycle. Witness it again starts a new cycle after the ending.</p>
+    </section>
     <div id="witness-focus" hidden aria-hidden="true">
       <span class="witness-ring"></span>
       <span class="witness-label">Find its eyes</span>
@@ -142,9 +149,10 @@
       <label for="volume-control">Volume</label>
       <input id="volume-control" type="range" min="0" max="100" step="1" value="70">
       <output id="volume-value" for="volume-control">70</output>
+      <button id="pause-toggle" type="button">Pause</button>
     </div>
-    <section id="ending-card" hidden aria-labelledby="ending-title">
-      <p class="ending-kicker">Ritual VI · The Cycle</p>
+    <section id="ending-card" hidden aria-labelledby="ending-title" role="dialog" aria-modal="true">
+      <p class="ending-kicker">The Cycle</p>
       <h1 id="ending-title">The Ancient One Has Awakened</h1>
       <p>The sea remembers. So do you.</p>
       <dl id="ending-stats">
@@ -199,7 +207,9 @@
       <div class="debug-actions">
         <button id="debug-awaken" type="button">Start awakening</button>
         <button id="debug-reset" type="button">Reset</button>
+        <button id="debug-measure" type="button">Capture measurements</button>
       </div>
+      <pre id="debug-measurements" hidden></pre>
       <small>F2 toggles this panel</small>
     </aside>
     <!-- Compass movement warning (hide after compass interaction in JS) -->
@@ -221,7 +231,8 @@
           <li><b>N</b>: Toggle ritual sound</li>
           <li><b>H</b>: Show/Hide Controls Guide</li>
           <li><b>F2</b>: Show/Hide Developer Diagnostics</li>
-          <li><b>R</b>: Reset Scene</li>
+          <li><b>P</b>: Pause / Resume</li>
+          <li><b>R</b>: Retry Current Cycle</li>
           <li><b>ESC</b>: Release Mouse</li>
         </ul>
         <button onclick="toggleControlsGuide()" id="controls-close-btn">Close</button>
@@ -240,6 +251,7 @@
     <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.3/gl-matrix-min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/timeline.js"></script>
+    <script src="js/scene-controls.js"></script>
     <script src="js/performance-monitor.js"></script>
     <script src="js/environment-effects.js"></script>
     <script src="js/weather-system.js"></script>
@@ -260,7 +272,7 @@
       }
       // H OPEN/CLOSE
       window.addEventListener('keydown', function(e) {
-        if (e.key.toLowerCase() === 'h') toggleControlsGuide();
+        if (e.key.toLowerCase() === 'h' && !e.repeat && !e.target.closest('button, input, select, textarea, a, [contenteditable="true"], [role="dialog"]')) toggleControlsGuide();
       });
       // Hide compass warning after compass is inspected (call from main.js)
       window.hideCompassWarning = function() {

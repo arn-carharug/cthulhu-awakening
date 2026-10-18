@@ -291,7 +291,7 @@ body.post-disabled #cinematic-overlay {
     bottom: 18px;
     z-index: 14;
     display: grid;
-    grid-template-columns: auto auto minmax(84px, 130px) 2.2rem;
+    grid-template-columns: auto auto minmax(84px, 130px) 2.2rem auto;
     align-items: center;
     gap: 9px;
     border: 1px solid #b9c8c229;
@@ -305,7 +305,8 @@ body.post-disabled #cinematic-overlay {
     backdrop-filter: blur(8px);
 }
 
-#sound-toggle {
+#sound-toggle,
+#pause-toggle {
     border: 0;
     border-radius: 999px;
     padding: 7px 10px;
@@ -330,7 +331,9 @@ body.post-disabled #cinematic-overlay {
 }
 
 #sound-toggle:hover,
-#sound-toggle:focus-visible {
+#sound-toggle:focus-visible,
+#pause-toggle:hover,
+#pause-toggle:focus-visible {
     color: #f1dfad;
     border-color: #d7bf7966;
 }
@@ -341,6 +344,7 @@ body.post-disabled #cinematic-overlay {
         max-width: calc(100vw - 120px);
     }
     #audio-controls label { display: none; }
+    #pause-toggle { grid-column: 1 / -1; }
 }
 
 #ending-card {
@@ -410,7 +414,8 @@ body.post-disabled #cinematic-overlay {
 }
 
 #ending-restart,
-#ending-continue {
+#ending-continue,
+#pause-resume {
     border: 1px solid #b99b5966;
     border-radius: 2px;
     padding: 0.8rem 1.35rem;
@@ -430,6 +435,40 @@ body.post-disabled #cinematic-overlay {
 @media (prefers-reduced-motion: reduce) {
     #cinematic-overlay { animation: none; }
     #ritual-caption, #ending-card, #ritual-progress span { transition: none; }
+}
+
+#pause-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 16000;
+    background: #050912ed;
+    color: #e7d7ad;
+    padding: 20vh 8vw;
+    text-align: center;
+}
+
+#pause-screen button {
+    padding: 0.8rem 1.4rem;
+    cursor: pointer;
+}
+
+#input-status {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 17000;
+    max-width: 90vw;
+    padding: 8px 12px;
+    color: #e7d7ad;
+    background: #131817;
+}
+
+#debug-measurements {
+    max-height: 160px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font: 11px/1.4 monospace;
 }
 
 @media (max-width: 640px) {

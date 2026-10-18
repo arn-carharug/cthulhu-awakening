@@ -6,10 +6,13 @@
             this.accumulated = 0;
             this.fps = 0;
             this.frameTime = 0;
+            this.samples = [];
         }
 
         update(deltaSeconds) {
             if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return;
+            this.samples.push(deltaSeconds * 1000);
+            if (this.samples.length > 600) this.samples.shift();
             this.frames += 1;
             this.accumulated += deltaSeconds;
             if (this.accumulated < 0.5) return;
@@ -20,6 +23,16 @@
             }
             this.frames = 0;
             this.accumulated = 0;
+        }
+
+        snapshot() {
+            const sorted = [...this.samples].sort((a, b) => a - b);
+            return {
+                sampleCount: sorted.length,
+                fps: this.fps,
+                meanFrameMs: this.frameTime,
+                p95FrameMs: sorted.length ? sorted[Math.ceil(sorted.length * 0.95) - 1] : null
+            };
         }
     }
 

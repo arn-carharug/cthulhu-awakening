@@ -104,7 +104,7 @@ async function validate() {
     }
 
     const requiredFiles = [
-        'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js',
+        'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js', 'js/scene-controls.js',
         'js/performance-monitor.js', 'js/debug-panel.js', 'js/environment-effects.js',
         'js/weather-system.js', 'js/omen-system.js', 'js/audio-system.js', 'js/ritual-presentation.js', 'js/game-loop.js',
         'shaders/vertex.glsl', 'shaders/fragment.glsl',

@@ -42,7 +42,8 @@ Then open [http://localhost:8000](http://localhost:8000).
 | Volume control | Adjust the complete sound mix from 0–100 |
 | H | Toggle the controls guide |
 | F2 | Toggle developer diagnostics |
-| R | Reset the complete scene |
+| P / Pause button | Pause the scene; P or Resume continues |
+| R | Retry the current cycle without advancing its number |
 | Escape | Release pointer lock |
 
 ## Project structure
@@ -54,6 +55,7 @@ main.js                    Scene state, input, animation, and rendering
 js/asset-loader.js         OBJ/MTL, texture, and shader loading utilities
 js/config.js               Quality presets and scene tuning values
 js/timeline.js             Event bus and deterministic scene timeline
+js/scene-controls.js       Held-key movement and active frame clock
 js/performance-monitor.js  FPS and frame-time diagnostics
 js/debug-panel.js          F2 developer controls
 js/environment-effects.js Procedural atmospheric particles
@@ -100,6 +102,14 @@ assets/textures/           Textures used by the active scene
 - Motion-sensitive visitors inherit their operating system's reduced-motion preference.
 - Load failures stop startup with a visible error.
 
+## Ritual roadmap
+
+Development milestones in this project are called **rituals**. Ritual VIII is implemented and awaiting the remaining browser checks; Rituals IX–XV are planned.
+
+See the [ritual roadmap](docs/RITUAL_ROADMAP.md) for scope, dependencies, and completion criteria, the [Ritual VIII report](docs/rituals/RITUAL_08_REPORT.md) for validation and measurements, and the [research notes](docs/RESEARCH_AND_ROADMAP.md) for references and findings.
+
+Ritual VIII adds frame-rate-independent movement, a pause dialog, focus-loss/hidden-tab pausing, safe final-card mouse release, and consistent active scene time. Resume is deliberate after returning to the page. R retries the same cycle and omen; **Witness it again** starts a new cycle. The F2 panel's **Capture measurements** button records browser, resolution, load time, and raw frame timings, including p95. The sample covers up to the most recent 600 active frames; FPS and mean time describe the latest half-second reporting window. Reduced 3D motion and omen shuffle changes belong to Ritual IX.
+
 ## Deployment
 
 The repository is static and can be hosted on GitHub Pages or any static HTTP server. Keep the existing relative directory structure. If external CDN access is undesirable, download `gl-matrix-min.js`, serve it locally, and update its script URL in `index.html`.
@@ -113,5 +123,6 @@ node --check main.js
 node --check js/asset-loader.js
 node --check scripts/serve.js
 node scripts/validate.js
+node --test scripts/ritual-08.test.js
 node scripts/serve.js
 ```

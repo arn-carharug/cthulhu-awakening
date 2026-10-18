@@ -13,6 +13,7 @@
 
     class RitualPresentation {
         constructor(events) {
+            this.events = events;
             this.caption = document.getElementById('ritual-caption');
             this.progress = document.querySelector('#ritual-progress span');
             this.ending = document.getElementById('ending-card');
@@ -27,10 +28,24 @@
         }
 
         show(copy, duration) {
-            clearTimeout(this.hideTimer);
             this.caption.textContent = copy;
             this.caption.classList.add('visible');
-            this.hideTimer = setTimeout(() => this.caption.classList.remove('visible'), duration);
+            this.hideTimer = duration / 1000;
+        }
+
+        update(deltaSeconds) {
+            if (this.hideTimer > 0) {
+                this.hideTimer -= deltaSeconds;
+                if (this.hideTimer <= 0) this.caption.classList.remove('visible');
+            }
+            if (this.endingTimer > 0) {
+                this.endingTimer -= deltaSeconds;
+                if (this.endingTimer <= 0) {
+                    this.ending.hidden = false;
+                    this.events.emit('ending:shown');
+                    document.getElementById('ending-continue').focus();
+                }
+            }
         }
 
         setProgress(progress) {
@@ -38,7 +53,7 @@
         }
 
         beginWitness() {
-            clearTimeout(this.hideTimer);
+            this.hideTimer = 0;
             this.setProgress(0);
             this.witness.hidden = false;
             this.show('Let the light bear witness.', 5200);
@@ -55,11 +70,10 @@
         }
 
         completeWitness() {
-            clearTimeout(this.hideTimer);
-            clearTimeout(this.endingTimer);
+            this.hideTimer = 0;
             this.caption.classList.remove('visible');
             this.witness.hidden = true;
-            this.endingTimer = setTimeout(() => { this.ending.hidden = false; }, 900);
+            this.endingTimer = 0.9;
         }
 
         dismissEnding() {
@@ -67,8 +81,8 @@
         }
 
         reset() {
-            clearTimeout(this.hideTimer);
-            clearTimeout(this.endingTimer);
+            this.hideTimer = 0;
+            this.endingTimer = 0;
             this.caption.classList.remove('visible');
             this.caption.textContent = '';
             this.progress.style.transform = 'scaleX(0)';
