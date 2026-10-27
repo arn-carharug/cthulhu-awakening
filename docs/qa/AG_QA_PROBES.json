@@ -1,0 +1,120 @@
+{
+  "testedHead": "ec5296ef713fae41564284f4402edcebaf32a931",
+  "node": "v24.19.0",
+  "browserTestsPerformed": false,
+  "results": [
+    {
+      "id": "QA-F01",
+      "scenario": "Recover overlap with two adjacent expanded hull obstacles",
+      "start": [
+        -9,
+        0,
+        22
+      ],
+      "movement": [
+        0,
+        0,
+        0
+      ],
+      "result": [
+        -9,
+        0,
+        21.049405
+      ],
+      "clearances": [
+        {
+          "id": "stone",
+          "clearance": 0.6805722689075631
+        },
+        {
+          "id": "twin",
+          "clearance": 1.0001
+        }
+      ],
+      "expected": "Every active obstacle clearance >= 1",
+      "pass": false
+    },
+    {
+      "id": "QA-F02",
+      "scenario": "World config and runtime journal agree",
+      "configured": [
+        12,
+        -1.4,
+        5
+      ],
+      "runtime": [
+        8,
+        -2.7,
+        43
+      ],
+      "pass": false
+    },
+    {
+      "id": "QA-F02b",
+      "scenario": "Collision consumes the shared world geometry",
+      "configured": [
+        100,
+        0,
+        100
+      ],
+      "actual": [
+        -9,
+        -1.4,
+        17
+      ],
+      "pass": false
+    },
+    {
+      "id": "QA-F03",
+      "scenario": "Decode timeout clears loading and forbids late playback",
+      "timedOutState": {
+        "current": "discovery.journal",
+        "status": "Loading narrator…",
+        "aborted": true
+      },
+      "laterAccepted": true,
+      "starts": 1,
+      "pass": false
+    },
+    {
+      "id": "QA-F04",
+      "scenario": "60 iterations of actual per-frame camera/torch helpers",
+      "allocations": {
+        "mat4.create": 60,
+        "vec3.create": 120,
+        "vec3.clone": 240
+      },
+      "expected": "Zero allocations as claimed in delivery",
+      "pass": false,
+      "note": "Counts actual helper allocations; this is not a browser GC profile or an FPS measurement."
+    },
+    {
+      "id": "QA-PASS-01",
+      "scenario": "Actual lifecycle adapter refusal ending then next cycle (DOM/GPU boundaries stubbed)",
+      "refused": {
+        "title": "You Withheld the Light",
+        "paused": true,
+        "shown": true
+      },
+      "cycleAfterRestart": 2,
+      "completeAfterRestart": false,
+      "pass": true
+    },
+    {
+      "id": "QA-F05",
+      "scenario": "Closing note and resetting while audio.enable is pending cancels replay",
+      "cardHidden": true,
+      "callsAfterReset": [
+        {
+          "id": "discovery.journal",
+          "options": {
+            "modal": true,
+            "repeat": true
+          }
+        }
+      ],
+      "pass": false,
+      "note": "Actual lifecycle method; delayed activation and narrator.play boundary are controlled."
+    }
+  ]
+}
