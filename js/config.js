@@ -5,9 +5,26 @@
         high: Object.freeze({ label: 'High', dpr: 2, waterSegments: 200, particles: 320, usePBR: true })
     });
 
+    const WORLD = Object.freeze({
+        initialShipPosition: Object.freeze([10, 0, 60]),
+        ruinsPosition: Object.freeze([0, 0, -30]),
+        cthulhuScale: 25,
+        pillarPositions: Object.freeze([
+            Object.freeze([-50, 0, -30]),
+            Object.freeze([0, 0, -30]),
+            Object.freeze([50, 0, -30])
+        ]),
+        pillarRadius: 3.2,
+        stonePosition: Object.freeze([-9, -1.4, 17]),
+        stoneRadius: 1.25,
+        journalPosition: Object.freeze([12, -1.4, 5]),
+        boatHull: Object.freeze({ rx: 2.0, rz: 4.7 })
+    });
+
     global.GameConfig = Object.freeze({
         defaultQuality: 'high',
         qualityPresets: QUALITY_PRESETS,
+        world: WORLD,
         camera: Object.freeze({ fov: Math.PI / 4, near: 0.1, far: 500 }),
         awakening: Object.freeze({
             duration: 42,
@@ -17,4 +34,4 @@
         torch: Object.freeze({ defaultIntensity: 5, automaticIntensity: 6, manualMax: 12 }),
         ocean: Object.freeze({ waveHeight: 0.72, waveSpeed: 0.82, foamThreshold: 0.48 })
     });
-}(window));
+}(typeof window !== 'undefined' ? window : globalThis));

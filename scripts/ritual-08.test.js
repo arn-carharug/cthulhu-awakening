@@ -77,7 +77,7 @@ function createScene(realMath = false) {
     });
     context.window = context;
     for (const file of ['config', 'timeline', 'scene-controls', 'comfort-settings', 'navigation', 'collision-system', 'discovery-system', 'wave-field', 'voyage-archive', 'performance-monitor',
-        'audio-system', 'narration-catalog', 'narration-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader']) {
+        'audio-system', 'narration-catalog', 'narration-system', 'ritual-presentation', 'game-loop', 'omen-system', 'weather-system', 'asset-loader', 'scene-lifecycle', 'scene-renderer', 'scene-interaction']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${file}.js`), 'utf8'), context);
     }
     const source = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
