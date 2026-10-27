@@ -24,19 +24,6 @@
         background: #050912;
         z-index: 1;
       }
-      #torch-ui {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        color: #FFD700;
-        background: rgba(20,20,20,0.7);
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-family: monospace;
-        font-size: 16px;
-        z-index: 10;
-        pointer-events: none;
-      }
       /* Controls Guide Styles */
       #controls-guide-container {
         position: fixed;
@@ -186,6 +173,13 @@
       <label><input id="comfort-boat" type="checkbox"> Reduce boat motion</label>
       <label><input id="comfort-shake" type="checkbox"> Reduce camera shake</label>
       <label><input id="comfort-lightning" type="checkbox"> Reduce lightning flashes</label>
+      <label><input id="captions-enabled" type="checkbox" checked> Subtitles</label>
+      <label for="caption-size">Subtitle size</label>
+      <select id="caption-size">
+        <option value="small">Small</option>
+        <option value="normal" selected>Normal</option>
+        <option value="large">Large</option>
+      </select>
       <label for="ambient-volume">Ambient sound</label><input id="ambient-volume" type="range" min="0" max="100" value="80">
       <label for="effects-volume">Sound effects</label><input id="effects-volume" type="range" min="0" max="100" value="80">
       <label><input id="narration-enabled" type="checkbox" checked> English narrator</label>
@@ -219,10 +213,6 @@
       <div id="loading-status">Loading shaders and artifacts</div>
     </div>
     <div id="fatal-error" role="alert" hidden><p id="fatal-message"></p><button id="reload-scene" type="button" onclick="location.reload()">Reload scene</button></div>
-    <div id="torch-ui">
-      Torch Control: <span id="torch-mode">OFF</span><br>
-      Brightness: <span id="torch-brightness">0.00</span>
-    </div>
     <aside id="objective-panel" aria-label="Ritual objectives">
       <div class="objective-heading"><span id="cycle-label">Cycle I</span><span id="objective-count">0/4</span></div>
       <div id="omen-label">Omen veiled</div>
@@ -235,6 +225,9 @@
     </aside>
     <aside id="debug-panel" hidden aria-label="Scene debug controls">
       <header>Scene diagnostics <span id="performance-stats">-- FPS · -- ms</span></header>
+      <div id="debug-torch-info">
+        Torch mode: <span id="torch-mode">OFF</span> · Brightness: <span id="torch-brightness">0.00</span>
+      </div>
       <label>Quality
         <select id="debug-quality">
           <option value="low">Low</option>
@@ -325,6 +318,10 @@
         const show = guide.style.display === 'none';
         guide.style.display = show ? 'block' : 'none';
         toggle.setAttribute('aria-expanded', String(show));
+        if (show) {
+          const btn = document.getElementById('controls-close-btn');
+          btn?.focus();
+        }
       }
       // H OPEN/CLOSE
       window.addEventListener('keydown', function(e) {

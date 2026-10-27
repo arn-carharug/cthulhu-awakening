@@ -10,7 +10,7 @@ const navigation = new window.VoyageNavigation();
 const discoveries = new window.DiscoverySystem();
 const voyageArchive = new window.VoyageArchive();
 const ritualAudio = new window.RitualAudioSystem();
-const ritualPresentation = new window.RitualPresentation(sceneEvents);
+const ritualPresentation = new window.RitualPresentation(sceneEvents, comfortSettings);
 const narrator = new window.NarrationSystem(ritualAudio, window.NarrationCatalog, {
     status: (copy) => { document.getElementById('narration-status').textContent = copy; },
     caption: (id, copy, duration) => {
@@ -403,6 +403,22 @@ for (const [id, key] of Object.entries({ 'comfort-system': 'followSystem', 'comf
     input.checked = comfortSettings.values[key];
     input.addEventListener('change', () => comfortSettings.set(key, input.checked));
 }
+const captionsToggle = document.getElementById('captions-enabled');
+if (captionsToggle) {
+    captionsToggle.checked = comfortSettings.values.captionsEnabled;
+    captionsToggle.addEventListener('change', () => {
+        comfortSettings.set('captionsEnabled', captionsToggle.checked);
+        ritualPresentation.applyCaptionSettings(comfortSettings);
+    });
+}
+const captionSizeSelect = document.getElementById('caption-size');
+if (captionSizeSelect) {
+    captionSizeSelect.value = comfortSettings.values.captionSize;
+    captionSizeSelect.addEventListener('change', () => {
+        comfortSettings.set('captionSize', captionSizeSelect.value);
+        ritualPresentation.applyCaptionSettings(comfortSettings);
+    });
+}
 const seedInput = document.getElementById('omen-seed');
 seedInput.value = String(comfortSettings.values.seed);
 document.getElementById('omen-seed-apply').addEventListener('click', () => {
@@ -660,6 +676,24 @@ window.addEventListener("keydown", (e) => {
         ? document.getElementById('pause-screen') : !ritualPresentation.ending.hidden ? ritualPresentation.ending
             : !document.getElementById('discovery-card').hidden ? document.getElementById('discovery-card')
                 : !document.getElementById('choice-card').hidden ? document.getElementById('choice-card') : null;
+    if (key === 'escape') {
+        const guide = document.getElementById('controls-guide');
+        if (guide && guide.style.display !== 'none') {
+            window.toggleControlsGuide?.();
+            e.preventDefault();
+            return;
+        }
+        if (!document.getElementById('discovery-card').hidden) {
+            document.getElementById('discovery-close').click();
+            e.preventDefault();
+            return;
+        }
+        if (!document.getElementById('choice-card').hidden) {
+            document.getElementById('reject-cancel').click();
+            e.preventDefault();
+            return;
+        }
+    }
     if (modal && key === 'tab') {
         const buttons = [...modal.querySelectorAll('button')];
         const index = buttons.indexOf(document.activeElement);
@@ -1277,6 +1311,7 @@ function resetScene(advanceCycle = false) {
     STATE.awakeningTimeline.reset();
     ritualAudio.reset();
     ritualPresentation.reset();
+    ritualPresentation.applyCaptionSettings(comfortSettings);
     ritualCycle.start(advanceCycle);
     STATE.omen = omenSystem.beginCycle(ritualCycle.cycle);
     ritualCycle.setOmen(STATE.omen.label);

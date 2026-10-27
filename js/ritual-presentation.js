@@ -12,8 +12,9 @@
     });
 
     class RitualPresentation {
-        constructor(events) {
+        constructor(events, comfortSettings = null) {
             this.events = events;
+            this.comfortSettings = comfortSettings;
             this.caption = document.getElementById('ritual-caption');
             this.progress = document.querySelector('#ritual-progress span');
             this.ending = document.getElementById('ending-card');
@@ -23,12 +24,26 @@
             this.hideTimer = 0;
             this.narrationHold = 0;
             this.endingTimer = 0;
+            if (this.comfortSettings) this.applyCaptionSettings(this.comfortSettings);
             Object.entries(COPY).forEach(([name, copy]) => events.on(name, () => this.show(copy, name === 'awakening:reveal' ? 5200 : 3300)));
             events.on('timeline:update', ({ progress }) => this.setProgress(progress));
             events.on('timeline:complete', () => this.beginWitness());
         }
 
+        applyCaptionSettings(comfortSettings) {
+            this.comfortSettings = comfortSettings;
+            if (this.caption) {
+                this.caption.dataset.captionSize = comfortSettings.values.captionSize || 'normal';
+                if (!comfortSettings.values.captionsEnabled) {
+                    this.caption.classList.remove('visible');
+                    this.caption.textContent = '';
+                    this.hideTimer = 0;
+                }
+            }
+        }
+
         show(copy, duration, narrated = false) {
+            if (this.comfortSettings && !this.comfortSettings.values.captionsEnabled) return;
             if (this.narrationHold > 0 && !narrated) return;
             if (narrated) this.narrationHold = duration / 1000;
             this.caption.textContent = copy;

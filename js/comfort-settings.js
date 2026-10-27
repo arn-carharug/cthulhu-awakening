@@ -1,13 +1,24 @@
 (function exposeComfortSettings(global) {
+    const VALID_CAPTION_SIZES = ['small', 'normal', 'large'];
     class ComfortSettings {
         constructor() {
-            this.values = { followSystem: true, reduceBoat: false, reduceShake: false,
-                reduceLightning: false, seed: 20261018 };
+            this.values = {
+                followSystem: true,
+                reduceBoat: false,
+                reduceShake: false,
+                reduceLightning: false,
+                captionsEnabled: true,
+                captionSize: 'normal',
+                seed: 20261018
+            };
             this.media = global.matchMedia?.('(prefers-reduced-motion: reduce)');
             try {
                 const saved = JSON.parse(global.localStorage.getItem('ritual-comfort') || 'null');
-                for (const key of ['followSystem', 'reduceBoat', 'reduceShake', 'reduceLightning']) {
+                for (const key of ['followSystem', 'reduceBoat', 'reduceShake', 'reduceLightning', 'captionsEnabled']) {
                     if (typeof saved?.[key] === 'boolean') this.values[key] = saved[key];
+                }
+                if (typeof saved?.captionSize === 'string' && VALID_CAPTION_SIZES.includes(saved.captionSize)) {
+                    this.values.captionSize = saved.captionSize;
                 }
                 if (Number.isInteger(saved?.seed) && saved.seed >= 0 && saved.seed <= 4294967295) this.values.seed = saved.seed;
             } catch { /* Storage is optional. */ }
@@ -16,6 +27,10 @@
         set(key, value) {
             if (key === 'seed') {
                 if (!Number.isInteger(value) || value < 0 || value > 4294967295) return false;
+            } else if (key === 'captionSize') {
+                if (!VALID_CAPTION_SIZES.includes(value)) return false;
+            } else if (key === 'captionsEnabled') {
+                if (typeof value !== 'boolean') return false;
             } else if (!['followSystem', 'reduceBoat', 'reduceShake', 'reduceLightning'].includes(key) || typeof value !== 'boolean') {
                 return false;
             }
