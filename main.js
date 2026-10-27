@@ -2,9 +2,11 @@
 // CTHULHU AWAKENING - MAIN ENTRY POINT
 // ==========================================
 
+const { loadOBJWithMTL, loadTexture, loadShaderSource, compileShader, createProgram, makeIndexArray } = window.AssetLoader || {};
+
 const gameConfig = window.GameConfig || {};
 const qualityPresets = gameConfig.qualityPresets;
-const defaultQuality = gameConfig.defaultQuality || 'high';
+const defaultQuality = gameConfig.defaultQuality || 'medium';
 const cameraConfig = gameConfig.camera || { fov: Math.PI / 4, near: 0.1, far: 500 };
 const awakeningConfig = gameConfig.awakening || { duration: 42, pillars: { start: 5, duration: 10, distance: 25 }, cthulhu: { start: 12, duration: 28, distance: 80 } };
 const torchConfig = gameConfig.torch || { defaultIntensity: 5, automaticIntensity: 6, manualMax: 12 };
@@ -198,6 +200,44 @@ let compassInspectedOnce = false;
 const pillarPositions = worldConfig.pillarPositions;
 
 // ==========================================
+// PRE-ALLOCATED FRAME BUFFERS (RITUAL XXV)
+// ==========================================
+const FRAME_BUFFERS = {
+    viewMatrix: glMatrix.mat4.create(),
+    waterModelMatrix: glMatrix.mat4.create(),
+    compassMatrix: glMatrix.mat4.create(),
+    needleMatrix: glMatrix.mat4.create(),
+    shipModelMatrix: glMatrix.mat4.create(),
+    pillarsMatrix: glMatrix.mat4.create(),
+    cthulhuMatrix: glMatrix.mat4.create(),
+    particleMatrix: glMatrix.mat4.create(),
+    cameraTarget: glMatrix.vec3.create(),
+    headWorld: glMatrix.vec4.create(),
+    headLocal: glMatrix.vec4.fromValues(0, 1.55, 1.39, 1),
+    toHead: glMatrix.vec3.create(),
+    modelOrigin: glMatrix.vec4.fromValues(0, 0, 0, 1),
+    transformedOrigin: glMatrix.vec4.create(),
+    emitter: glMatrix.vec3.create()
+};
+
+// Throttled DOM cache to eliminate layout thrashing
+const DOM_CACHE = {
+    torchBrightness: null,
+    compassReadout: null,
+    voyageHint: null,
+    beaconLeft: null,
+    beaconTop: null,
+    beaconHidden: null,
+    inspectHidden: null,
+    inspectText: null,
+    lanternHidden: null,
+    endingHidden: null
+};
+
+window.FRAME_BUFFERS = FRAME_BUFFERS;
+window.DOM_CACHE = DOM_CACHE;
+
+// ==========================================
 // SCENE CONTEXT & MODULAR SUBSYSTEMS
 // ==========================================
 const sceneContext = {
@@ -230,6 +270,10 @@ const sceneInteraction = new window.SceneInteraction(sceneContext);
 sceneContext.sceneLifecycle = sceneLifecycle;
 sceneContext.sceneRenderer = sceneRenderer;
 sceneContext.sceneInteraction = sceneInteraction;
+
+window.sceneLifecycle = sceneLifecycle;
+window.sceneRenderer = sceneRenderer;
+window.sceneInteraction = sceneInteraction;
 
 sceneInteraction.bind();
 sceneLifecycle.updateArchiveSummary();
@@ -271,7 +315,14 @@ function getCameraPosition() { return sceneRenderer.getCameraPosition(); }
 function getTorchPosition() { return sceneRenderer.getTorchPosition(); }
 function getCompassPosition() { return sceneRenderer.getCompassPosition(); }
 function getFPSTorchMatrix() { return sceneRenderer.getFPSTorchMatrix(); }
-function getTorchLightWorldPosition() { return sceneRenderer.getTorchLightWorldPosition(); }
+function getTorchLightWorldPosition() {
+    STATE.vec4.transformMat4(FRAME_BUFFERS.transformedOrigin, FRAME_BUFFERS.modelOrigin, STATE.torchMatrix);
+    FRAME_BUFFERS.emitter[0] = FRAME_BUFFERS.transformedOrigin[0];
+    FRAME_BUFFERS.emitter[1] = FRAME_BUFFERS.transformedOrigin[1];
+    FRAME_BUFFERS.emitter[2] = FRAME_BUFFERS.transformedOrigin[2];
+    STATE.vec3.scaleAndAdd(FRAME_BUFFERS.emitter, FRAME_BUFFERS.emitter, STATE.cameraFront, 0.22);
+    return FRAME_BUFFERS.emitter;
+}
 function createWaterGrid(cols, rows, size = 1) { return sceneRenderer.createWaterGrid(cols, rows, size); }
 function rebuildWaterMesh(segments) { sceneRenderer.rebuildWaterMesh(segments); }
 function createEffectsVAO(vertices) { return sceneRenderer.createEffectsVAO(vertices); }
@@ -289,31 +340,75 @@ function isLookingAtRlyeh() {
 function updateNavigation() {
     const sample = navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime);
     const degrees = (sample.heading * 180 / Math.PI + 360) % 360;
-    const readout = document.getElementById('compass-readout');
-    if (readout) readout.textContent = `Heading ${degrees.toFixed(0).padStart(3, '0')}° · Ruins ${sample.distance.toFixed(0)}m${sample.disturbed ? ' · Needle unstable' : ''}`;
+    const readoutText = `Heading ${degrees.toFixed(0).padStart(3, '0')}° · Ruins ${sample.distance.toFixed(0)}m${sample.disturbed ? ' · Needle unstable' : ''}`;
+    if (DOM_CACHE.compassReadout !== readoutText) {
+        DOM_CACHE.compassReadout = readoutText;
+        const readout = document.getElementById('compass-readout');
+        if (readout) readout.textContent = readoutText;
+    }
+
     const hint = navigation.guidance(sample, compassInspectedOnce, STATE.compassInspectMode, STATE.awakeningStarted, STATE.torchLit, STATE.witness.complete);
-    const hintElement = document.getElementById('voyage-hint');
-    if (hintElement && hintElement.textContent !== hint) hintElement.textContent = hint;
+    if (DOM_CACHE.voyageHint !== hint) {
+        DOM_CACHE.voyageHint = hint;
+        const hintElement = document.getElementById('voyage-hint');
+        if (hintElement) hintElement.textContent = hint;
+    }
+
+    const beaconHidden = STATE.awakeningStarted || Math.abs(sample.relative) > Math.PI / 3;
+    const beaconLeft = `${50 + Math.max(-43, Math.min(43, sample.relative * 75))}%`;
+    const beaconTop = `${Math.max(8, Math.min(90, 47 + STATE.pitch * 1.5))}%`;
     const beacon = document.getElementById('bearing-beacon');
     if (beacon) {
-        beacon.hidden = STATE.awakeningStarted || Math.abs(sample.relative) > Math.PI / 3;
-        beacon.style.left = `${50 + Math.max(-43, Math.min(43, sample.relative * 75))}%`;
-        beacon.style.top = `${Math.max(8, Math.min(90, 47 + STATE.pitch * 1.5))}%`;
+        if (DOM_CACHE.beaconHidden !== beaconHidden) {
+            DOM_CACHE.beaconHidden = beaconHidden;
+            beacon.hidden = beaconHidden;
+        }
+        if (!beaconHidden) {
+            if (DOM_CACHE.beaconLeft !== beaconLeft) {
+                DOM_CACHE.beaconLeft = beaconLeft;
+                beacon.style.left = beaconLeft;
+            }
+            if (DOM_CACHE.beaconTop !== beaconTop) {
+                DOM_CACHE.beaconTop = beaconTop;
+                beacon.style.top = beaconTop;
+            }
+        }
     }
+
+    const inspectHidden = STATE.awakeningStarted;
+    const inspectText = STATE.compassInspectMode ? 'Lower compass · E / C' : 'Inspect compass · E';
     const inspectBtn = document.getElementById('inspect-compass');
     if (inspectBtn) {
-        inspectBtn.hidden = STATE.awakeningStarted;
-        inspectBtn.textContent = STATE.compassInspectMode ? 'Lower compass · E / C' : 'Inspect compass · E';
+        if (DOM_CACHE.inspectHidden !== inspectHidden) {
+            DOM_CACHE.inspectHidden = inspectHidden;
+            inspectBtn.hidden = inspectHidden;
+        }
+        if (DOM_CACHE.inspectText !== inspectText) {
+            DOM_CACHE.inspectText = inspectText;
+            inspectBtn.textContent = inspectText;
+        }
     }
+
     const nearby = discoveries.nearby(STATE.shipPosition, STATE.cameraFront);
     for (const site of discoveries.sites) {
         const btn = document.getElementById(`discover-${site.id}`);
-        if (btn) btn.hidden = STATE.awakeningStarted || !compassInspectedOnce || !nearby.includes(site);
+        const siteHidden = STATE.awakeningStarted || !compassInspectedOnce || !nearby.includes(site);
+        if (btn && btn.hidden !== siteHidden) btn.hidden = siteHidden;
     }
+
+    const lanternHidden = !STATE.awakeningStarted || STATE.torchLit;
     const lanternBtn = document.getElementById('light-lantern');
-    if (lanternBtn) lanternBtn.hidden = !STATE.awakeningStarted || STATE.torchLit;
+    if (lanternBtn && DOM_CACHE.lanternHidden !== lanternHidden) {
+        DOM_CACHE.lanternHidden = lanternHidden;
+        lanternBtn.hidden = lanternHidden;
+    }
+
+    const endingHidden = !STATE.awakeningTimeline.complete || STATE.witness.complete;
     const endingChoice = document.getElementById('ending-choice');
-    if (endingChoice) endingChoice.hidden = !STATE.awakeningTimeline.complete || STATE.witness.complete;
+    if (endingChoice && DOM_CACHE.endingHidden !== endingHidden) {
+        DOM_CACHE.endingHidden = endingHidden;
+        endingChoice.hidden = endingHidden;
+    }
     return sample;
 }
 
@@ -321,19 +416,15 @@ function updateWitnessPhase(deltaSeconds, cthulhuMatrix) {
     if (!STATE.awakeningTimeline.complete || STATE.witness.complete) return;
     STATE.witness.active = true;
 
-    const headLocal = STATE.vec4.fromValues(0, 1.55, 1.39, 1);
-    const headWorld = STATE.vec4.create();
-    STATE.vec4.transformMat4(headWorld, headLocal, cthulhuMatrix);
+    STATE.vec4.transformMat4(FRAME_BUFFERS.headWorld, FRAME_BUFFERS.headLocal, cthulhuMatrix);
     const cameraPosition = getCameraPosition();
-    const toHead = STATE.vec3.fromValues(
-        headWorld[0] - cameraPosition[0],
-        headWorld[1] - cameraPosition[1],
-        headWorld[2] - cameraPosition[2]
-    );
-    STATE.vec3.normalize(toHead, toHead);
+    FRAME_BUFFERS.toHead[0] = FRAME_BUFFERS.headWorld[0] - cameraPosition[0];
+    FRAME_BUFFERS.toHead[1] = FRAME_BUFFERS.headWorld[1] - cameraPosition[1];
+    FRAME_BUFFERS.toHead[2] = FRAME_BUFFERS.headWorld[2] - cameraPosition[2];
+    STATE.vec3.normalize(FRAME_BUFFERS.toHead, FRAME_BUFFERS.toHead);
 
     const locked = STATE.torchLit && STATE.effects.lighting && STATE.torchLightIntensity > 0
-        && window.DiscoverySystem.aligned(STATE.cameraFront, toHead);
+        && window.DiscoverySystem.aligned(STATE.cameraFront, FRAME_BUFFERS.toHead);
     if (locked && !STATE.witness.locked) ritualAudio.cue('witness:locked');
     STATE.witness.locked = locked;
     if (locked) {
@@ -432,18 +523,21 @@ function drawScene(timestamp) {
         STATE.ambientLight[1] = Math.max(STATE.ambientLight[1] - 0.6 * deltaSeconds, 0.0);
         STATE.ambientLight[2] = Math.max(STATE.ambientLight[2] - 0.36 * deltaSeconds, 0.0);
     }
-    const tb = document.getElementById("torch-brightness");
-    if (tb) tb.textContent = STATE.torchLightIntensity.toFixed(2);
 
-    // 2. View & camera
+    // Throttled brightness DOM update
+    const formattedBrightness = STATE.torchLightIntensity.toFixed(2);
+    if (DOM_CACHE.torchBrightness !== formattedBrightness) {
+        DOM_CACHE.torchBrightness = formattedBrightness;
+        const tb = document.getElementById("torch-brightness");
+        if (tb) tb.textContent = formattedBrightness;
+    }
+
+    // 2. View & camera (reusing FRAME_BUFFERS)
     updateBoatMotion();
     let cameraPosition = getCameraPosition();
-    let target = STATE.vec3.create();
-    STATE.vec3.add(target, cameraPosition, STATE.cameraFront);
-
-    const viewMatrix = STATE.mat4.create();
-    STATE.mat4.lookAt(viewMatrix, cameraPosition, target, STATE.cameraUp);
-    gl.uniformMatrix4fv(STATE.uViewLoc, false, viewMatrix);
+    STATE.vec3.add(FRAME_BUFFERS.cameraTarget, cameraPosition, STATE.cameraFront);
+    STATE.mat4.lookAt(FRAME_BUFFERS.viewMatrix, cameraPosition, FRAME_BUFFERS.cameraTarget, STATE.cameraUp);
+    gl.uniformMatrix4fv(STATE.uViewLoc, false, FRAME_BUFFERS.viewMatrix);
     gl.uniform1f(STATE.uTimeLoc, STATE.elapsedTime);
     gl.uniform3fv(STATE.uCameraPosLoc, cameraPosition);
     gl.uniform2f(STATE.uResolutionLoc, STATE.canvas.width, STATE.canvas.height);
@@ -495,7 +589,7 @@ function drawScene(timestamp) {
     );
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // Water
+    // Water (reusing FRAME_BUFFERS.waterModelMatrix)
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, STATE.waterTexture);
     gl.uniform1i(STATE.uTextureLoc, 4);
@@ -503,11 +597,11 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uUsePBRLoc, 0);
     gl.uniform1i(STATE.uIsWaterLoc, 1);
     gl.bindVertexArray(STATE.waterVAO);
-    const waterModelMatrix = STATE.mat4.create();
-    STATE.mat4.translate(waterModelMatrix, waterModelMatrix, [
+    STATE.mat4.identity(FRAME_BUFFERS.waterModelMatrix);
+    STATE.mat4.translate(FRAME_BUFFERS.waterModelMatrix, FRAME_BUFFERS.waterModelMatrix, [
         STATE.shipPosition[0], -3.5, STATE.shipPosition[2]
     ]);
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, waterModelMatrix);
+    gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.waterModelMatrix);
     gl.drawElements(gl.TRIANGLES, STATE.waterIndexCount, gl.UNSIGNED_INT, 0);
     gl.uniform1i(STATE.uUseTextureLoc, 0);
     gl.uniform1i(STATE.uIsWaterLoc, 0);
@@ -550,17 +644,16 @@ function drawScene(timestamp) {
 
     // Compass
     if (!STATE.compassInspectMode) {
-        const compassMatrix = STATE.mat4.create();
-        STATE.mat4.identity(compassMatrix);
-        STATE.mat4.translate(compassMatrix, compassMatrix, getCompassPosition());
+        STATE.mat4.identity(FRAME_BUFFERS.compassMatrix);
+        STATE.mat4.translate(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, getCompassPosition());
         if (STATE.cinematic.compassSpin) {
             const spinAge = Math.max(0, STATE.awakeningTimeline.elapsed - 2);
-            STATE.mat4.rotateY(compassMatrix, compassMatrix, spinAge * (2.8 + Math.min(spinAge, 8) * 0.16));
-            STATE.mat4.rotateZ(compassMatrix, compassMatrix, Math.sin(spinAge * 4.5) * 0.08);
+            STATE.mat4.rotateY(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, spinAge * (2.8 + Math.min(spinAge, 8) * 0.16));
+            STATE.mat4.rotateZ(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, Math.sin(spinAge * 4.5) * 0.08);
         }
-        STATE.mat4.scale(compassMatrix, compassMatrix, [0.1, 0.1, 0.1]);
+        STATE.mat4.scale(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, [0.1, 0.1, 0.1]);
         gl.bindVertexArray(STATE.compassVAO);
-        gl.uniformMatrix4fv(STATE.uModelLoc, false, compassMatrix);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.compassMatrix);
         gl.uniform1i(STATE.uCompassHoveredLoc, STATE.compassHovered ? 1 : 0);
         gl.uniform1i(STATE.uIsCompassLoc, 1);
 
@@ -574,24 +667,23 @@ function drawScene(timestamp) {
 
         gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleEBO);
-        const needleMatrix = STATE.mat4.clone(compassMatrix);
-        STATE.mat4.rotateY(needleMatrix, needleMatrix, navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).needleAngle);
-        gl.uniformMatrix4fv(STATE.uModelLoc, false, needleMatrix);
+        STATE.mat4.copy(FRAME_BUFFERS.needleMatrix, FRAME_BUFFERS.compassMatrix);
+        STATE.mat4.rotateY(FRAME_BUFFERS.needleMatrix, FRAME_BUFFERS.needleMatrix, navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).needleAngle);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.needleMatrix);
         gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, STATE.compassNeedleIndexType, 0);
         gl.uniform1i(STATE.uIsCompassLoc, 0);
     } else {
-        const compassMatrix = STATE.mat4.create();
-        STATE.mat4.identity(compassMatrix);
+        STATE.mat4.identity(FRAME_BUFFERS.compassMatrix);
         let cameraPos = getCameraPosition();
         let inspectPos = STATE.vec3.create();
         STATE.vec3.scaleAndAdd(inspectPos, cameraPos, STATE.cameraFront, 1.0);
-        STATE.mat4.translate(compassMatrix, compassMatrix, inspectPos);
-        STATE.mat4.rotateY(compassMatrix, compassMatrix, STATE.compassYaw);
-        STATE.mat4.rotateX(compassMatrix, compassMatrix, -Math.PI / 2 + STATE.compassPitch);
-        STATE.mat4.scale(compassMatrix, compassMatrix, [0.2, 0.2, 0.2]);
+        STATE.mat4.translate(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, inspectPos);
+        STATE.mat4.rotateY(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, STATE.compassYaw);
+        STATE.mat4.rotateX(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, -Math.PI / 2 + STATE.compassPitch);
+        STATE.mat4.scale(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, [0.2, 0.2, 0.2]);
 
         gl.bindVertexArray(STATE.compassVAO);
-        gl.uniformMatrix4fv(STATE.uModelLoc, false, compassMatrix);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.compassMatrix);
         gl.uniform1i(STATE.uCompassHoveredLoc, 0);
         gl.uniform1i(STATE.uIsCompassLoc, 1);
 
@@ -605,14 +697,14 @@ function drawScene(timestamp) {
 
         gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleEBO);
-        const needleMatrix = STATE.mat4.clone(compassMatrix);
-        STATE.mat4.rotateY(needleMatrix, needleMatrix, -navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).heading + navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).needleAngle);
-        gl.uniformMatrix4fv(STATE.uModelLoc, false, needleMatrix);
+        STATE.mat4.copy(FRAME_BUFFERS.needleMatrix, FRAME_BUFFERS.compassMatrix);
+        STATE.mat4.rotateY(FRAME_BUFFERS.needleMatrix, FRAME_BUFFERS.needleMatrix, -navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).heading + navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).needleAngle);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.needleMatrix);
         gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, STATE.compassNeedleIndexType, 0);
         gl.uniform1i(STATE.uIsCompassLoc, 0);
     }
 
-    // Ship
+    // Ship (reusing FRAME_BUFFERS.shipModelMatrix)
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, STATE.shipTexture);
     gl.uniform1i(STATE.uTextureLoc, 0);
@@ -620,17 +712,17 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uUsePBRLoc, 0);
     gl.uniform1i(STATE.uIsShipLoc, 1);
     gl.bindVertexArray(STATE.shipVAO);
-    const modelMatrix = STATE.mat4.create();
-    STATE.mat4.translate(modelMatrix, modelMatrix, [
+    STATE.mat4.identity(FRAME_BUFFERS.shipModelMatrix);
+    STATE.mat4.translate(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, [
         STATE.shipPosition[0],
         STATE.shipPosition[1] + STATE.boatMotion.bob,
         STATE.shipPosition[2]
     ]);
-    STATE.mat4.rotateZ(modelMatrix, modelMatrix, STATE.boatMotion.roll);
-    STATE.mat4.rotateX(modelMatrix, modelMatrix, STATE.boatMotion.pitch);
-    STATE.mat4.rotateX(modelMatrix, modelMatrix, Math.PI / 2);
-    STATE.mat4.rotateY(modelMatrix, modelMatrix, Math.PI);
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, modelMatrix);
+    STATE.mat4.rotateZ(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, STATE.boatMotion.roll);
+    STATE.mat4.rotateX(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, STATE.boatMotion.pitch);
+    STATE.mat4.rotateX(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, Math.PI / 2);
+    STATE.mat4.rotateY(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, Math.PI);
+    gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.shipModelMatrix);
     gl.drawElements(gl.TRIANGLES, STATE.shipIndexCount, STATE.shipIndexType, 0);
     gl.uniform1i(STATE.uIsShipLoc, 0);
     gl.uniform1i(STATE.uUseTextureLoc, 0);
@@ -643,7 +735,7 @@ function drawScene(timestamp) {
     gl.drawArrays(gl.TRIANGLES, 0, STATE.discoveryCount);
     gl.uniform1i(STATE.uIsDiscoveryLoc, 0);
 
-    // Pillars
+    // Pillars (reusing FRAME_BUFFERS.pillarsMatrix)
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, STATE.pillarsTexture);
     gl.uniform1i(STATE.uTextureLoc, 1);
@@ -652,25 +744,27 @@ function drawScene(timestamp) {
 
     for (let i = 0; i < pillarPositions.length; i++) {
         const base = pillarPositions[i];
-        const pillarsMatrix = STATE.mat4.create();
-        STATE.mat4.translate(pillarsMatrix, pillarsMatrix, [
+        STATE.mat4.identity(FRAME_BUFFERS.pillarsMatrix);
+        STATE.mat4.translate(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, [
             base[0], base[1] + pillarsRiseY, base[2]
         ]);
-        STATE.mat4.scale(pillarsMatrix, pillarsMatrix, [500.2, 500.2, 500.2]);
-        STATE.mat4.rotateX(pillarsMatrix, pillarsMatrix, Math.PI / 2);
-        STATE.mat4.rotateZ(pillarsMatrix, pillarsMatrix, Math.PI / 2);
+        STATE.mat4.scale(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, [500.2, 500.2, 500.2]);
+        STATE.mat4.rotateX(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, Math.PI / 2);
+        STATE.mat4.rotateZ(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, Math.PI / 2);
         gl.bindVertexArray(STATE.pillarsVAO);
-        gl.uniformMatrix4fv(STATE.uModelLoc, false, pillarsMatrix);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.pillarsMatrix);
         gl.drawElements(gl.TRIANGLES, STATE.pillarsIndexCount, STATE.pillarsIndexType, 0);
     }
 
-    // Cthulhu
-    const cthulhuMatrix = STATE.mat4.create();
+    // Cthulhu (reusing FRAME_BUFFERS.cthulhuMatrix)
     const CTHULHU_X = STATE.omen.creatureOffset[0];
     const CTHULHU_Z = -80 + STATE.omen.creatureOffset[1];
     const CTHULHU_INITIAL_Y = -75;
-    STATE.mat4.translate(cthulhuMatrix, cthulhuMatrix, [CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y, CTHULHU_Z]);
-    STATE.mat4.scale(cthulhuMatrix, cthulhuMatrix, [CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE]);
+    STATE.mat4.identity(FRAME_BUFFERS.cthulhuMatrix);
+    STATE.mat4.translate(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix, [
+        CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y, CTHULHU_Z
+    ]);
+    STATE.mat4.scale(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix, [CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE]);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, STATE.cthulhuTexture);
     gl.uniform1i(STATE.uTextureLoc, 3);
@@ -687,7 +781,7 @@ function drawScene(timestamp) {
     const qualityAllowsPBR = qualityPresets[STATE.quality].usePBR;
     gl.uniform1i(STATE.uUsePBRLoc, STATE.effects.pbr && qualityAllowsPBR ? 1 : 0);
     gl.bindVertexArray(STATE.cthulhuVAO);
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, cthulhuMatrix);
+    gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.cthulhuMatrix);
     const silhouetteProgress = Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 19) / 17));
     const revealProgress = Math.min(1, Math.max(0, (STATE.awakeningTimeline.elapsed - 36) / 6));
     gl.uniform1i(STATE.uIsCthulhuLoc, 1);
@@ -706,7 +800,7 @@ function drawScene(timestamp) {
         gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.uniform1i(STATE.uIsEyeLoc, 1);
         gl.uniform1f(STATE.uEyeIntensityLoc, eyeIntensity);
-        gl.uniformMatrix4fv(STATE.uModelLoc, false, cthulhuMatrix);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.cthulhuMatrix);
         gl.bindVertexArray(STATE.eyeVAO);
         gl.drawArrays(gl.POINTS, 0, STATE.eyeCount);
         gl.uniform1i(STATE.uIsEyeLoc, 0);
@@ -714,12 +808,12 @@ function drawScene(timestamp) {
         gl.disable(gl.BLEND);
     }
 
-    updateWitnessPhase(deltaSeconds, cthulhuMatrix);
+    updateWitnessPhase(deltaSeconds, FRAME_BUFFERS.cthulhuMatrix);
 
-    // Dust particles
+    // Dust particles (reusing FRAME_BUFFERS.particleMatrix)
     if (STATE.effects.particles) {
-        const particleMatrix = STATE.mat4.create();
-        STATE.mat4.translate(particleMatrix, particleMatrix, [
+        STATE.mat4.identity(FRAME_BUFFERS.particleMatrix);
+        STATE.mat4.translate(FRAME_BUFFERS.particleMatrix, FRAME_BUFFERS.particleMatrix, [
             STATE.shipPosition[0], STATE.shipPosition[1] + 1.2 + STATE.boatMotion.bob, STATE.shipPosition[2]
         ]);
         gl.enable(gl.BLEND);
@@ -727,7 +821,7 @@ function drawScene(timestamp) {
         gl.depthMask(false);
         gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.uniform1i(STATE.uIsParticleLoc, 1);
-        gl.uniformMatrix4fv(STATE.uModelLoc, false, particleMatrix);
+        gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.particleMatrix);
         gl.bindVertexArray(STATE.particleVAO);
         gl.drawArrays(gl.POINTS, 0, STATE.particleCount);
         gl.uniform1i(STATE.uIsParticleLoc, 0);
@@ -884,11 +978,41 @@ async function main() {
     STATE.torchIndexType = torchModel.indexType === 'uint32' ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
 
     // 3) Compass
+    const compassBodyIndices = [];
+    const compassNeedleIndices = [];
+    for (let i = 0; i < compassModel.indices.length; i += 3) {
+        const mat = compassModel.materialForFace[i];
+        if (mat === "bodyMat") {
+            compassBodyIndices.push(
+                compassModel.indices[i],
+                compassModel.indices[i + 1],
+                compassModel.indices[i + 2]
+            );
+        } else if (mat === "needleMat") {
+            compassNeedleIndices.push(
+                compassModel.indices[i],
+                compassModel.indices[i + 1],
+                compassModel.indices[i + 2]
+            );
+        }
+    }
+    STATE.compassBodyIndices = makeIndexArray(compassBodyIndices);
+    STATE.compassNeedleIndices = makeIndexArray(compassNeedleIndices);
+
     const compassVAO = STATE.gl.createVertexArray();
     STATE.gl.bindVertexArray(compassVAO);
     const compassVBO = STATE.gl.createBuffer();
     STATE.gl.bindBuffer(STATE.gl.ARRAY_BUFFER, compassVBO);
     STATE.gl.bufferData(STATE.gl.ARRAY_BUFFER, compassModel.vertices, STATE.gl.STATIC_DRAW);
+
+    const compassBodyEBO = STATE.gl.createBuffer();
+    STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, compassBodyEBO);
+    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, STATE.compassBodyIndices, STATE.gl.STATIC_DRAW);
+
+    const compassNeedleEBO = STATE.gl.createBuffer();
+    STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, compassNeedleEBO);
+    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleIndices, STATE.gl.STATIC_DRAW);
+
     const compassStride = 11 * Float32Array.BYTES_PER_ELEMENT;
     STATE.gl.vertexAttribPointer(STATE.aPositionLoc, 3, STATE.gl.FLOAT, false, compassStride, 0);
     STATE.gl.enableVertexAttribArray(STATE.aPositionLoc);
@@ -898,19 +1022,14 @@ async function main() {
     STATE.gl.enableVertexAttribArray(STATE.aColorLoc);
     STATE.gl.vertexAttribPointer(texCoordLoc, 2, STATE.gl.FLOAT, false, compassStride, 9 * Float32Array.BYTES_PER_ELEMENT);
     STATE.gl.enableVertexAttribArray(texCoordLoc);
-    const compassBodyEBO = STATE.gl.createBuffer();
-    STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, compassBodyEBO);
-    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, compassModel.meshBodyIndices, STATE.gl.STATIC_DRAW);
-    STATE.compassBodyEBO = compassBodyEBO;
-    STATE.compassBodyIndexCount = compassModel.meshBodyIndices.length;
-    STATE.compassBodyIndexType = compassModel.bodyIndexType === 'uint32' ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
-    const compassNeedleEBO = STATE.gl.createBuffer();
-    STATE.gl.bindBuffer(STATE.gl.ELEMENT_ARRAY_BUFFER, compassNeedleEBO);
-    STATE.gl.bufferData(STATE.gl.ELEMENT_ARRAY_BUFFER, compassModel.meshNeedleIndices, STATE.gl.STATIC_DRAW);
-    STATE.compassNeedleEBO = compassNeedleEBO;
-    STATE.compassNeedleIndexCount = compassModel.meshNeedleIndices.length;
-    STATE.compassNeedleIndexType = compassModel.needleIndexType === 'uint32' ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
+
     STATE.compassVAO = compassVAO;
+    STATE.compassBodyEBO = compassBodyEBO;
+    STATE.compassNeedleEBO = compassNeedleEBO;
+    STATE.compassBodyIndexCount = STATE.compassBodyIndices.length;
+    STATE.compassNeedleIndexCount = STATE.compassNeedleIndices.length;
+    STATE.compassBodyIndexType = STATE.compassBodyIndices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
+    STATE.compassNeedleIndexType = STATE.compassNeedleIndices instanceof Uint32Array ? STATE.gl.UNSIGNED_INT : STATE.gl.UNSIGNED_SHORT;
 
     // 4) Pillars
     const pillarsVAO = STATE.gl.createVertexArray();
@@ -966,12 +1085,12 @@ async function main() {
     STATE.eyeVBO = eyeEffect.buffer;
     STATE.eyeCount = eyeEffect.count;
 
-    const discoveryEffect = createEffectsVAO(discoveries.mesh());
+    const discoveryEffect = createEffectsVAO(window.EnvironmentEffects.createDiscoveryMesh(discoveries.sites));
     STATE.discoveryVAO = discoveryEffect.vao;
     STATE.discoveryVBO = discoveryEffect.buffer;
     STATE.discoveryCount = discoveryEffect.count;
 
-    STATE.performanceMonitor = new window.PerformanceMonitor(STATE.gl);
+    STATE.performanceMonitor = new window.PerformanceMonitor(document.getElementById("performance-stats"));
     document.getElementById("loading-screen").hidden = true;
     requestAnimationFrame(drawScene);
 }
@@ -982,10 +1101,11 @@ function showFatalError(error) {
     const panel = document.getElementById("fatal-error");
     if (panel) panel.hidden = false;
     const msg = document.getElementById('fatal-message');
-    if (msg) msg.textContent = `The scene could not be started.\n${error.message}`;
+    if (msg) msg.textContent = `The scene could not be started.\n${error.stack || error.message}`;
 }
 
 // Clean test access
+window.STATE = STATE;
 window.createSceneRuntime = () => sceneContext;
 
 // BOOTSTRAP

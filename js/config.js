@@ -22,7 +22,7 @@
     });
 
     global.GameConfig = Object.freeze({
-        defaultQuality: 'high',
+        defaultQuality: 'medium',
         qualityPresets: QUALITY_PRESETS,
         world: WORLD,
         camera: Object.freeze({ fov: Math.PI / 4, near: 0.1, far: 500 }),
