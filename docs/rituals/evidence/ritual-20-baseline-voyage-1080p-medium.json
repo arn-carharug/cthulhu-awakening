@@ -1,0 +1,75 @@
+{
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "dpr": 1
+  },
+  "renderSize": {
+    "width": 1920,
+    "height": 1080
+  },
+  "quality": "medium",
+  "omenSeed": 20261018,
+  "initialLoadMs": 1774.7999999523163,
+  "paused": false,
+  "performance": {
+    "sampleCount": 600,
+    "fps": 70.05253940455346,
+    "meanFrameMs": 14.274999999999991,
+    "p95FrameMs": 27.399999999999636
+  },
+  "resources": [
+    {
+      "file": "high/boat_wood_wet_v2.webp",
+      "transferBytes": 642382,
+      "decodedBytes": 642082
+    },
+    {
+      "file": "high/compass_brass_v2.webp",
+      "transferBytes": 743018,
+      "decodedBytes": 742718
+    },
+    {
+      "file": "high/germany010.webp",
+      "transferBytes": 455514,
+      "decodedBytes": 455214
+    },
+    {
+      "file": "high/Cthulhu_2k_Base_Color.webp",
+      "transferBytes": 911366,
+      "decodedBytes": 911066
+    },
+    {
+      "file": "high/Cthulhu_2k_AO.webp",
+      "transferBytes": 520,
+      "decodedBytes": 220
+    },
+    {
+      "file": "high/Cthulhu_2k_Metallic.webp",
+      "transferBytes": 702070,
+      "decodedBytes": 701770
+    },
+    {
+      "file": "high/beautiful-photo-sea-waves.webp",
+      "transferBytes": 356918,
+      "decodedBytes": 356618
+    },
+    {
+      "file": "high/Cthulhu_2k_Roughness.webp",
+      "transferBytes": 1810020,
+      "decodedBytes": 1809720
+    }
+  ],
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A78B) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "phase": "voyage-calm",
+  "cacheCondition": "Reload with ignoreCache=true on localhost HTTP server",
+  "shipPosition": [
+    10,
+    0,
+    60
+  ]
+}
