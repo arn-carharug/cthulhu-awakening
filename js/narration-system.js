@@ -1,4 +1,13 @@
 (function exposeNarrationSystem(global) {
+    const DEFAULT_EVENT_TTL = {
+        'awakening.rumble': 10.0,
+        'awakening.presence': 4.8,
+        'awakening.silhouette': 9.8,
+        'awakening.eyes': 6.8,
+        'awakening.reveal': 5.8,
+        'witness.begin': 8.0
+    };
+
     class NarrationSystem {
         constructor(audio, catalog = global.NarrationCatalog, options = {}) {
             this.audio = audio;
@@ -6,6 +15,9 @@
             this.fetch = options.fetch || global.fetch?.bind(global);
             this.status = options.status || (() => {});
             this.onCaption = options.caption || (() => {});
+            this.now = options.now || (() => (typeof this.audio?.context?.currentTime === 'number' ? this.audio.context.currentTime : (typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000)));
+            this.setTimeout = options.setTimeout || global.setTimeout || (typeof setTimeout !== 'undefined' ? setTimeout : null);
+            this.clearTimeout = options.clearTimeout || global.clearTimeout || (typeof clearTimeout !== 'undefined' ? clearTimeout : null);
             this.language = catalog.defaultLanguage;
             this.enabled = true;
             this.volume = 0.8;
@@ -14,6 +26,9 @@
             this.serial = 0;
             this.cache = new Map();
             this.seen = new Set();
+            this.pausedAt = null;
+            this.totalPausedDuration = 0;
+
             try {
                 const saved = JSON.parse(global.localStorage.getItem('ritual-narration') || 'null');
                 if (typeof saved?.enabled === 'boolean') this.enabled = saved.enabled;
@@ -47,7 +62,39 @@
                 && (!this.audio.paused || clip?.modal);
         }
 
+        updatePauseTracking() {
+            const isPaused = Boolean(this.audio?.paused);
+            const now = this.now();
+            if (isPaused) {
+                if (this.pausedAt === null) {
+                    this.pausedAt = now;
+                }
+            } else {
+                if (this.pausedAt !== null) {
+                    this.totalPausedDuration += Math.max(0, now - this.pausedAt);
+                    this.pausedAt = null;
+                }
+            }
+        }
+
+        getActiveTime() {
+            this.updatePauseTracking();
+            const now = this.now();
+            let pausedTime = this.totalPausedDuration;
+            if (this.pausedAt !== null) {
+                pausedTime += Math.max(0, now - this.pausedAt);
+            }
+            return Math.max(0, now - pausedTime);
+        }
+
+        isStale(clip) {
+            if (!clip || !Number.isFinite(clip.ttl)) return false;
+            const elapsedActive = this.getActiveTime() - clip.requestedActiveTime;
+            return elapsedActive > clip.ttl;
+        }
+
         sync() {
+            this.updatePauseTracking();
             if (!this.enabled || !this.audio.enabled || this.audio.muted || this.audio.volume === 0 || this.volume === 0) {
                 if (this.current) this.stop();
                 return;
@@ -63,38 +110,106 @@
 
         setHidden(hidden) { this.hidden = Boolean(hidden); this.sync(); }
 
-        async play(id, { modal = false, repeat = false } = {}) {
+        async play(id, { modal = false, repeat = false, maxStaleSeconds } = {}) {
             const entry = this.entry(id);
             if (!entry || !this.canPlay({ modal }) || (!repeat && this.seen.has(id))) return false;
             if (this.current && this.current.entry.priority > entry.priority) return false;
             this.stop();
-            const clip = { id, entry, modal, token: ++this.serial, offset: 0, source: null, controller: new AbortController() };
+
+            let ttl;
+            if (maxStaleSeconds !== undefined) {
+                ttl = maxStaleSeconds;
+            } else if (entry.maxSeconds !== undefined) {
+                ttl = entry.maxSeconds;
+            } else if (entry.validitySeconds !== undefined) {
+                ttl = entry.validitySeconds;
+            } else if (DEFAULT_EVENT_TTL[id] !== undefined) {
+                ttl = DEFAULT_EVENT_TTL[id];
+            } else if (modal || entry.priority >= 2) {
+                ttl = Infinity;
+            } else {
+                ttl = 10.0;
+            }
+
+            const clip = {
+                id,
+                entry,
+                modal,
+                ttl,
+                requestedActiveTime: this.getActiveTime(),
+                token: ++this.serial,
+                offset: 0,
+                source: null,
+                controller: new AbortController()
+            };
             this.current = clip;
             this.status('Loading narrator…');
+
+            const maxWaitSeconds = Number.isFinite(clip.ttl) ? Math.max(clip.ttl + 0.5, 4.0) : 15.0;
+            if (this.setTimeout) {
+                const timeoutId = this.setTimeout(() => {
+                    if (this.current === clip && !clip.buffer) {
+                        clip.timedOut = true;
+                        clip.controller.abort();
+                    }
+                }, maxWaitSeconds * 1000);
+                if (timeoutId?.unref) timeoutId.unref();
+                clip.timeoutId = timeoutId;
+            }
+
             try {
                 if (!this.cache.has(entry.file)) {
                     const response = await this.fetch(entry.file, { signal: clip.controller.signal });
                     if (!response.ok) throw new Error('Missing narration');
                     const bytes = await response.arrayBuffer();
-                    if (this.current !== clip) return false;
+                    if (this.current !== clip) {
+                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
+                        return false;
+                    }
+                    if (this.isStale(clip)) {
+                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
+                        this.stop();
+                        return false;
+                    }
                     const buffer = await this.audio.context.decodeAudioData(bytes);
-                    if (this.current !== clip) return false;
+                    if (this.current !== clip) {
+                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
+                        return false;
+                    }
+                    if (this.isStale(clip)) {
+                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
+                        this.stop();
+                        return false;
+                    }
                     this.cache.set(entry.file, buffer);
                 }
+                if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
                 if (this.current !== clip) return false;
+                if (this.isStale(clip)) {
+                    this.stop();
+                    return false;
+                }
                 clip.buffer = this.cache.get(entry.file);
                 this.sync();
                 return true;
             } catch {
+                if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
                 if (this.current === clip) {
+                    const isAbort = clip.controller.signal.aborted || clip.timedOut;
                     this.stop();
-                    this.status('Narration unavailable. The written text remains available.');
+                    if (!isAbort) {
+                        this.status('Narration unavailable. The written text remains available.');
+                    }
                 }
                 return false;
             }
         }
 
         start(clip) {
+            if (this.isStale(clip)) {
+                this.stop();
+                return;
+            }
             const context = this.audio.context;
             if (!this.gain) {
                 this.gain = context.createGain();
@@ -140,13 +255,20 @@
             this.serial++;
             const clip = this.current;
             this.current = null;
+            if (clip?.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
             clip?.controller.abort();
             if (clip) this.disconnect(clip);
             this.audio.setNarrationDucking?.(false);
             this.status('');
         }
 
-        reset() { this.stop(); this.seen.clear(); }
+        reset() {
+            this.stop();
+            this.seen.clear();
+            this.pausedAt = null;
+            this.totalPausedDuration = 0;
+        }
     }
+
     global.NarrationSystem = NarrationSystem;
 }(window));
