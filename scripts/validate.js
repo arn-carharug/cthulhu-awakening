@@ -106,9 +106,9 @@ async function validate() {
     const requiredFiles = [
         'index.html', 'main.js', 'css/style.css', 'js/config.js', 'js/timeline.js', 'js/scene-controls.js', 'js/comfort-settings.js', 'js/navigation.js', 'js/collision-system.js',
         'js/performance-monitor.js', 'js/debug-panel.js', 'js/environment-effects.js',
-        'js/weather-system.js', 'js/omen-system.js', 'js/audio-system.js', 'js/ritual-presentation.js', 'js/game-loop.js', 'js/discovery-system.js', 'js/wave-field.js', 'js/voyage-archive.js',
+        'js/weather-system.js', 'js/omen-system.js', 'js/audio-system.js', 'js/narration-catalog.js', 'js/narration-system.js', 'js/ritual-presentation.js', 'js/game-loop.js', 'js/discovery-system.js', 'js/wave-field.js', 'js/voyage-archive.js',
         'js/scene-lifecycle.js', 'js/scene-renderer.js', 'js/scene-interaction.js',
-        'shaders/vertex.glsl', 'shaders/fragment.glsl',
+        'shaders/vertex.glsl', 'shaders/fragment.glsl', 'assets/audio/narration/ATTRIBUTION.md',
         'assets/textures/WeatheredWood2_S.jpg', 'assets/textures/OC1KI90.jpg',
         'assets/textures/boat_wood_wet_v2.png', 'assets/textures/compass_brass_v2.png',
         'assets/textures/germany010.jpg', 'assets/textures/beautiful-photo-sea-waves.jpg',

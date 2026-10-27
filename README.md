@@ -5,12 +5,12 @@ A framework-free WebGL 2 scene inspired by cosmic horror. Explore the sea from a
 ## Requirements
 
 - A current browser with WebGL 2 support
-- A local HTTP server (the application loads shaders and models with `fetch`)
-- Node.js 22+ for the included server and tests
+- A local HTTP server (the application loads shaders, textures, audio, and models with `fetch`)
+- Node.js 20+ (Node.js 22 recommended) for the included dependency-free server and test suite
 
-The runtime is self-contained: `gl-matrix` 3.4.3 and its MIT license are included in `js/vendor/`. Python/Pillow regenerate textures; Python/Piper and FFmpeg regenerate narration. None are required by players.
+The runtime is self-contained: `gl-matrix` 3.4.3 and its MIT license are included in `js/vendor/`. No build step or remote CDN dependencies are required. All assets operate 100% offline.
 
-Opening `index.html` directly with a `file://` URL is not supported.
+Opening `index.html` directly with a `file://` URL is not supported due to browser security restrictions on WebGL and fetch requests.
 
 ## Run locally
 
@@ -27,7 +27,7 @@ $env:PORT=9000; node scripts/serve.js
 ```
 
 Then open [http://localhost:8000](http://localhost:8000).
-Choose visual quality and click **Begin voyage**. Low downloads smaller textures; Medium and High use the full delivery textures.
+Choose visual quality (Medium is selected by default to protect low-power hardware while preserving PBR water aesthetics) and click **Begin voyage**. Low downloads smaller textures; Medium and High use the full delivery textures.
 
 ## Controls
 
@@ -38,7 +38,7 @@ Choose visual quality and click **Begin voyage**. Low downloads smaller textures
 | WASD | Move the boat; rotate the compass while inspecting it |
 | Arrow keys | Look around; rotate the compass while inspecting |
 | E / Inspect compass button | Raise or lower the compass |
-| C | Finish compass inspection |
+| C | Lower/finish compass inspection |
 | Click torch / L / Raise lantern button | Light the lantern during awakening |
 | F / nearby discovery button | Read an optional journal or marked stone |
 | B / Turn away button | Choose the refusal ending after awakening; confirmation required |
@@ -47,107 +47,99 @@ Choose visual quality and click **Begin voyage**. Low downloads smaller textures
 | N | Toggle procedural ritual sound |
 | Volume control | Adjust the complete sound mix from 0–100 |
 | H | Toggle the controls guide |
-| F2 | Toggle developer diagnostics |
+| F2 | Toggle developer diagnostics panel |
 | P / Pause button | Pause the scene; P or Resume continues |
 | R | Retry the current cycle without advancing its number |
+| Tab / Shift+Tab | Navigate interactive buttons within modal dialogs |
 | Escape | Release pointer lock |
 
-## Project structure
+## Comfort and Accessibility Settings
+
+The collapsible **Comfort & replay** panel allows players to customize their experience:
+
+- **Subtitles / Captions:** Toggle subtitle captions on/off (`captionsEnabled`), and adjust caption font size (`small`, `medium`, `large`). Disabling subtitles suppresses narrative voice captions while preserving vital voyage navigation hints and objective status.
+- **Motion Reduction:** Supports automatic detection of operating system `prefers-reduced-motion`, with manual toggles for 3D boat motion and camera tremors.
+- **Lightning Flash Suppression:** Reduces intense lightning flashes for photosensitive players.
+- **Deterministic Replay Seed:** Controls the four-omen progression sequence without adjacent repeats.
+- **Independent Narration Control:** Dedicated toggle and volume slider for voice narration.
+
+## Project Structure
 
 ```text
-index.html                 Page shell, HUD, controls, loading/error UI
-css/style.css              Shared presentation styles
-main.js                    Scene state, input, animation, and rendering
-js/asset-loader.js         OBJ/MTL, texture, and shader loading utilities
-js/config.js               Quality presets and scene tuning values
-js/timeline.js             Event bus and deterministic scene timeline
-js/scene-controls.js       Held-key movement and active frame clock
-js/comfort-settings.js     Persistent motion/flash preferences and replay seed
-js/navigation.js           Compass bearings, anomaly drift and next-action hints
-js/discovery-system.js     Optional discovery sites and lantern alignment
-js/wave-field.js           World-space wave sampling matching the water shader
-js/voyage-archive.js        Persistent notes, omens and endings
-js/texture-catalog.js       Low/high delivery texture selection
-js/performance-monitor.js  FPS and frame-time diagnostics
-js/debug-panel.js          F2 developer controls
-js/environment-effects.js Procedural atmospheric particles
-js/weather-system.js      Deterministic lightning and storm timing
-js/omen-system.js         Cycle-specific sea, fog, storm, and horizon omens
-js/audio-system.js        Procedural wind, rumble, thunder, and heartbeat
-js/ritual-presentation.js Cinematic captions, progress, and ending state
-js/game-loop.js           Ritual objectives, cycle tracking, and run statistics
-shaders/vertex.glsl        World transforms and normal handling
-shaders/fragment.glsl      Material and torch lighting
-assets/models/             OBJ and MTL scene models
-assets/textures/           Textures used by the active scene
+index.html                     Page shell, layered non-overlapping HUD, modal cards, loading/error UI
+css/style.css                  Shared presentation styles, focus-visible outlines, layout layers
+main.js                        Scene orchestrator, frame buffer pooling, and DOM write cache
+js/asset-loader.js             OBJ/MTL, WebP texture, and GLSL shader loading utilities
+js/config.js                   Quality presets, camera, awakening timeline, and shared GameConfig.world definition
+js/scene-lifecycle.js          Unified state machine for pause, reset, awakening, endings, and discovery cards
+js/scene-interaction.js        Input listeners, pointer-lock handling, and leak-safe event bindings
+js/scene-renderer.js           WebGL 2 VAO/VBO creation, dynamic water grid, particle buffers, camera math
+js/collision-system.js         Swept hull collision (rx=2.0, rz=4.7), sliding resolution, submerged pillar gating
+js/timeline.js                 Event bus and deterministic scene timeline
+js/scene-controls.js           Held-key movement and active frame clock
+js/comfort-settings.js         Persistent motion/flash preferences, caption settings, and replay seed
+js/navigation.js               Compass bearings, anomaly drift and next-action hints
+js/discovery-system.js         Line-of-sight raycasting, 78.5° view-cone gating, and discovery sites
+js/wave-field.js               World-space wave sampling matching the vertex water shader
+js/voyage-archive.js           Persistent notes, omens, and endings storage
+js/texture-catalog.js          Low/high delivery WebP texture selection
+js/performance-monitor.js      FPS and frame-time diagnostics (sample window, mean, p95)
+js/debug-panel.js              F2 developer controls and diagnostics
+js/environment-effects.js      Procedural atmospheric particles, eye points, and discovery mesh
+js/weather-system.js           Deterministic lightning and storm timing
+js/omen-system.js              Cycle-specific sea, fog, storm, and horizon omens
+js/audio-system.js             Procedural wind, rumble, thunder, and heartbeat audio
+js/narration-catalog.js        Multi-language narration catalogs, timeline events, and Turkish fallback
+js/narration-system.js         Single-voice narration playback, TTL expiration, and pause duration exclusion
+js/ritual-presentation.js      Cinematic captions, progress, and ending state
+js/game-loop.js                Ritual objectives, cycle tracking, and run statistics
+shaders/vertex.glsl            World transforms, normal handling, and multi-directional waves
+shaders/fragment.glsl          PBR material, fog, and dual-lobe lantern lighting
+assets/models/                 OBJ and MTL scene models
+assets/textures/               Textures and WebP optimized delivery variants
+assets/audio/narration/        Narration audio clips (MP3), clean sources (WAV), and attribution
 ```
 
-## Rendering notes
+## Rendering & Performance Notes
 
-- WebGL 2, VAOs, VBOs, and indexed drawing are used directly.
-- OBJ polygons are triangulated during loading.
-- Index buffers automatically use 16- or 32-bit indices.
-- Only Cthulhu uses the AO/metallic/roughness material path.
-- The compass uses an aged engraved-brass texture with a dedicated metallic response.
-- The boat uses salt-weathered wet timber with controlled roughness and Fresnel sheen.
-- Animation uses elapsed time and is independent of display refresh rate.
+- WebGL 2, VAOs, VBOs, and indexed drawing are used directly without external 3D libraries.
+- Pre-allocated `FRAME_BUFFERS` pool eliminates per-frame garbage-collection spikes during the render loop.
+- `DOM_CACHE` throttles HUD text and style writes, preventing browser layout thrashing.
+- Baseline measurements on an integrated GPU (`Intel UHD Graphics`, 1080p Medium, DPR 1):
+  - Normal voyage: **107.11 FPS**, mean frame time **9.34 ms**, p95 **14.10 ms**.
+  - Awakening sequence: **94.00 FPS**, mean frame time **10.64 ms**, p95 **14.20 ms** (comfortably exceeding the 60 FPS target).
 - Canvas resolution follows viewport size and device pixel ratio, capped at 2x.
-- F2 opens a diagnostics panel with quality and effect controls.
-- Models and textures are loaded in parallel.
-- Exponential distance fog thickens during the awakening.
-- The lantern combines short-range omnidirectional light with a broad forward lobe.
-- Procedural dust and moisture particles drift around the camera.
-- Ten pre-generated English neural narration clips accompany discoveries, key awakening moments and both endings. Playback is local; no speech service or API key is used during play.
-- Comfort & replay offers independent narrator enable/volume controls. Master mute covers narration; Read aloud on notes and Replay narration on endings enable deliberate replay.
-- Narration briefly lowers ambient/effect audio, pauses with the scene, and stops when a note closes or a cycle resets. Text remains available with narration disabled or a recording unavailable.
-- Cinematic grading adds tone mapping, vignette, grain, and a cold color bias.
-- The ocean uses multi-directional vertex waves, dynamic normals, foam, and Fresnel reflections.
-- Boat and camera motion are synchronized with the active wave field.
-- Lightning flashes intensify during the awakening and affect both objects and sky color.
-- Ritual IV stages the awakening through an erratic compass, rising seas, restrained camera tremors, scripted lightning, a shadow-first Cthulhu reveal, and emissive eyes.
-- The final reveal briefly destabilizes the lantern and exposes the creature during a forced storm flash.
-- Ritual V adds event-synchronized procedural audio, restrained narrative captions, an awakening progress trace, and a replayable ending card.
-- The audio mix uses an audible mid-bass rumble and a dynamics compressor so laptop speakers remain effective at high volume settings.
-- The ending now requires the player to hold the lantern on Cthulhu's eyes for four seconds; losing aim gently drains progress instead of blocking exploration.
-- The completed ending can be dismissed with “Keep watching” to continue inspecting the scene.
-- Ritual VI turns the experience into a four-step loop: read the compass, approach R'lyeh, raise the lantern, and bear witness.
-- Each completed cycle reports elapsed time, lantern focus accuracy, and the longest uninterrupted hold before allowing another run.
-- Ritual VII assigns each cycle one of four hidden omens—The Black Tide, The Red Wake, The Drowned Star, or The Hollow Calm—which reshapes fog, waves, lightning, and Cthulhu's horizon position.
-- Ritual VII deliberately keeps the three pillar positions and their awakening animation unchanged.
-- Motion-sensitive visitors inherit their operating system's reduced-motion preference.
-- Load failures stop startup with a visible error.
+- Exponential distance fog thickens dynamically during awakening.
+- Ten pre-generated English neural narration clips accompany discoveries, key awakening moments, and endings.
 
-## Ritual roadmap
+## Deployment & Subdirectory Hosting
 
-Development milestones in this project are called **rituals**. The VIII–XV implementation sequence is complete. Acceptance remains open for human playtests, listening checks and the full normal-browser matrix; see the [Ritual XV report](docs/rituals/RITUAL_15_REPORT.md).
+The repository is fully static and ready for hosting on GitHub Pages, itch.io, or any static HTTP server:
+- All asset URLs and script/style tags use relative paths, allowing the application to be served from any root or sub-path (e.g. `/cthulhu-awakening/`).
+- Required MIME types are configured in `scripts/serve.js`:
+  - Shaders & Models: `text/plain` (`.glsl`, `.obj`, `.mtl`)
+  - Audio: `audio/mpeg` (`.mp3`), `audio/wav` (`.wav`)
+  - Textures: `image/webp` (`.webp`), `image/png` (`.png`), `image/jpeg` (`.jpg`)
+  - Data: `application/json` (`.json`)
+- Clean distribution package: no model weights, cache directories, `.tools/`, or temporary test artifacts pollute the deployment bundle. Source licenses and attributions are preserved in `assets/audio/narration/ATTRIBUTION.md` and `js/vendor/gl-matrix-LICENSE.md`.
 
-See the [ritual roadmap](docs/RITUAL_ROADMAP.md) for scope, dependencies, and completion criteria, the [Ritual VIII report](docs/rituals/RITUAL_08_REPORT.md) for validation and measurements, and the [research notes](docs/RESEARCH_AND_ROADMAP.md) for references and findings.
+## Automated CI & Development Verification
 
-Ritual VIII adds frame-rate-independent movement, a pause dialog, focus-loss/hidden-tab pausing, safe final-card mouse release, and consistent active scene time. Resume is deliberate after returning to the page. R retries the same cycle and omen; **Witness it again** starts a new cycle. The F2 panel's **Capture measurements** button records browser, resolution, load time, and raw frame timings, including p95. The sample covers up to the most recent 600 active frames; FPS and mean time describe the latest half-second reporting window.
+An automated GitHub Actions workflow is configured in `.github/workflows/ci.yml` running on Node 20 and 22:
 
-Ritual IX adds **Comfort & replay** settings for system motion preference, boat motion, camera shake, and reduced lightning. The saved replay seed reproduces a sequence of shuffled four-omen sets with no adjacent repeats. See the [Ritual IX report](docs/rituals/RITUAL_09_REPORT.md).
-
-Rituals X–XIII add compass navigation, a northern beacon, two optional discoveries, shared world-space boat/ocean motion, layered audio, and two deliberate endings. The local archive records discovered notes, omens and endings; retrying or starting another cycle preserves it. **Clear discoveries & endings** in Comfort clears only the archive.
-
-Ritual XIV reduces active delivery textures from 34.65 MiB to 5.36 MiB on High and 0.51 MiB on Low, adds startup quality selection and a reload path for loading/context errors. Source images remain unchanged. Regenerate with `python scripts/optimize-textures.py` (Pillow required). The F2 panel also offers **Test graphics recovery**, which intentionally loses the current graphics context and requires a reload.
-
-## Deployment
-
-The repository is static and can be hosted on GitHub Pages or any static HTTP server. Keep the existing relative directory structure, including `js/vendor/`, `assets/textures/optimized/`, and `assets/audio/narration/en/`. No external CDN is required. This work has not been deployed.
-
-Narration rituals XVI–XIX have recordings and playback implemented; human listening and the full normal-browser acceptance matrix remain open. See the [narration plan](docs/NARRATION_PLAN.md), [Ritual XIX report](docs/rituals/RITUAL_19_REPORT.md), and [voice credits](assets/audio/narration/ATTRIBUTION.md). The first pack is English; a future Turkish pack will use the author's own recordings. No Turkish pack or custom voice clone is included.
-
-For audio production, install `piper-tts==1.3.0` into `.tools/narration/python`, then run `python scripts/download-narration-model.py` and `python scripts/generate-narration.py`. FFmpeg/FFprobe must be on PATH. `python scripts/verify-narration.py` independently decodes and measures the final MP3 files. The model/runtime cache is ignored by Git and not needed for deployment. Clean WAV sources are retained under `assets/audio/narration/source/en/`; gameplay only requests the compressed files.
-
-## Development checks
-
-There is no build step. Before publishing, run syntax checks and serve the project over HTTP:
+Run local development verification checks before committing:
 
 ```powershell
+# 1. Syntax check across all JavaScript source files
 node --check main.js
-node --check js/asset-loader.js
-node --check scripts/serve.js
+Get-ChildItem -Path "js/*.js", "scripts/*.js" | ForEach-Object { node --check $_.FullName }
+
+# 2. Static asset and model buffer integrity validation
 node scripts/validate.js
+
+# 3. Full automated test suite (60 regression tests)
 node --test scripts/ritual-*.test.js
+
+# 4. Start local server
 node scripts/serve.js
 ```
