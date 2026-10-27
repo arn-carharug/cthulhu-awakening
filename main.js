@@ -7,7 +7,8 @@ const sceneEvents = new window.SceneRuntime.EventBus();
 const sceneControls = new window.SceneControls();
 const comfortSettings = new window.ComfortSettings();
 const navigation = new window.VoyageNavigation();
-const discoveries = new window.DiscoverySystem();
+const collisionSystem = new window.CollisionSystem();
+const discoveries = new window.DiscoverySystem(collisionSystem);
 const voyageArchive = new window.VoyageArchive();
 const ritualAudio = new window.RitualAudioSystem();
 const ritualPresentation = new window.RitualPresentation(sceneEvents, comfortSettings);
@@ -358,7 +359,7 @@ function updateNavigation() {
     beacon.style.top = `${Math.max(8, Math.min(90, 47 + STATE.pitch * 1.5))}%`;
     document.getElementById('inspect-compass').hidden = STATE.awakeningStarted;
     document.getElementById('inspect-compass').textContent = STATE.compassInspectMode ? 'Lower compass · E / C' : 'Inspect compass · E';
-    const nearby = discoveries.nearby(STATE.shipPosition);
+    const nearby = discoveries.nearby(STATE.shipPosition, STATE.cameraFront);
     for (const site of discoveries.sites) document.getElementById(`discover-${site.id}`).hidden = STATE.awakeningStarted || !compassInspectedOnce || !nearby.includes(site);
     document.getElementById('light-lantern').hidden = !STATE.awakeningStarted || STATE.torchLit;
     document.getElementById('ending-choice').hidden = !STATE.awakeningTimeline.complete || STATE.witness.complete;
@@ -367,7 +368,7 @@ function updateNavigation() {
 
 function inspectDiscovery(id) {
     if (STATE.paused || STATE.awakeningStarted || !compassInspectedOnce) return;
-    const site = discoveries.inspect(id, STATE.shipPosition);
+    const site = discoveries.inspect(id, STATE.shipPosition, STATE.cameraFront);
     if (!site) return;
     document.getElementById('discovery-title').textContent = site.title;
     document.getElementById('discovery-copy').textContent = site.text;
@@ -438,6 +439,7 @@ document.getElementById('comfort-controls').addEventListener('toggle', (event) =
 });
 // Add right after STATE:
 let pillarsRiseY = 0;
+    collisionSystem.setPillarsActive(false);
 // Water Plane (2D Quad) - Position, Normal, Color, UV
 //-------------------------------------------------------------------------------------------------------//
 const pillarsMaxRiseY = awakeningConfig.pillars.distance;
@@ -717,7 +719,7 @@ window.addEventListener("keydown", (e) => {
     if (key === 'l' && !e.repeat) { lightLantern(); return; }
     if (key === 'b' && !e.repeat) { openEndingChoice(); return; }
     if (key === 'f' && !e.repeat) {
-        const site = discoveries.nearby(STATE.shipPosition)[0];
+        const site = discoveries.nearby(STATE.shipPosition, STATE.cameraFront)[0];
         if (site) inspectDiscovery(site.id);
         return;
     }
@@ -1638,6 +1640,7 @@ function drawScene(timestamp) {
     }
     if (STATE.awakeningStarted) {
         pillarsRiseY = STATE.awakeningTimeline.value('pillars');
+        collisionSystem.setPillarsActive(pillarsRiseY > 0);
         STATE.cthulhuRiseY = STATE.awakeningTimeline.value('cthulhu');
     }
 

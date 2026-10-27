@@ -1,65 +1,238 @@
 (function exposeDiscoverySystem(global) {
+    const HULL_HALF_WIDTH = 2.0;
+    const HULL_HALF_LENGTH = 4.7;
+
+    class InternalCollisionSystem {
+        constructor() {
+            this.pillarsActive = false;
+            this.obstacles = [
+                {
+                    id: 'stone',
+                    position: [-9, -1.4, 17],
+                    radius: 1.25,
+                    isActive: () => true
+                },
+                {
+                    id: 'pillar_left',
+                    position: [-50, 0, -30],
+                    radius: 3.2,
+                    isActive: () => this.pillarsActive
+                },
+                {
+                    id: 'pillar_center',
+                    position: [0, 0, -30],
+                    radius: 3.2,
+                    isActive: () => this.pillarsActive
+                },
+                {
+                    id: 'pillar_right',
+                    position: [50, 0, -30],
+                    radius: 3.2,
+                    isActive: () => this.pillarsActive
+                }
+            ];
+        }
+
+        setPillarsActive(active) {
+            this.pillarsActive = Boolean(active);
+        }
+
+        addObstacle(obstacle) {
+            this.obstacles.push(obstacle);
+        }
+
+        moveShip(startPosition, movement, maxIterations = 4) {
+            const current = [startPosition[0], startPosition[1], startPosition[2]];
+            let remaining = [movement[0], movement[1], movement[2]];
+
+            for (let iter = 0; iter < maxIterations; iter++) {
+                if (remaining[0] === 0 && remaining[2] === 0) break;
+
+                let earliestHit = 1.0;
+                let hitObstacle = null;
+                let hitNormal = null;
+
+                for (const obs of this.obstacles) {
+                    if (!obs.isActive()) continue;
+                    const rx = obs.radius + HULL_HALF_WIDTH;
+                    const rz = obs.radius + HULL_HALF_LENGTH;
+
+                    let x = (current[0] - obs.position[0]) / rx;
+                    let z = (current[2] - obs.position[2]) / rz;
+                    const dist = Math.hypot(x, z);
+
+                    if (dist < 1.0) {
+                        const nx = dist > 1e-8 ? x / dist : 0;
+                        const nz = dist > 1e-8 ? z / dist : 1.0001;
+                        x = nx * 1.0001;
+                        z = nz * 1.0001;
+                        current[0] = obs.position[0] + x * rx;
+                        current[2] = obs.position[2] + z * rz;
+                    }
+
+                    const dx = remaining[0] / rx;
+                    const dz = remaining[2] / rz;
+                    const a = dx * dx + dz * dz;
+                    const b = x * dx + z * dz;
+                    const discriminant = b * b - a * (x * x + z * z - 1.0);
+
+                    if (a > 1e-12 && b < 0 && discriminant >= 0) {
+                        const hit = (-b - Math.sqrt(discriminant)) / a;
+                        if (hit >= 0 && hit < earliestHit) {
+                            earliestHit = hit;
+                            hitObstacle = obs;
+                            const hx = x + dx * hit;
+                            const hz = z + dz * hit;
+                            const hlen = Math.hypot(hx, hz);
+                            hitNormal = [hx / hlen, hz / hlen];
+                        }
+                    }
+                }
+
+                if (hitObstacle && hitNormal) {
+                    const rx = hitObstacle.radius + HULL_HALF_WIDTH;
+                    const rz = hitObstacle.radius + HULL_HALF_LENGTH;
+
+                    current[0] += remaining[0] * earliestHit;
+                    current[2] += remaining[2] * earliestHit;
+
+                    let remDx = remaining[0] * (1.0 - earliestHit) / rx;
+                    let remDz = remaining[2] * (1.0 - earliestHit) / rz;
+
+                    const inward = Math.min(0, remDx * hitNormal[0] + remDz * hitNormal[1]);
+                    remDx -= inward * hitNormal[0];
+                    remDz -= inward * hitNormal[1];
+
+                    remaining[0] = remDx * rx;
+                    remaining[2] = remDz * rz;
+
+                    const curX = (current[0] - hitObstacle.position[0]) / rx;
+                    const curZ = (current[2] - hitObstacle.position[2]) / rz;
+                    const curDist = Math.hypot(curX, curZ);
+                    if (curDist < 1.0001) {
+                        const len = curDist > 1e-8 ? curDist : 1.0;
+                        current[0] = hitObstacle.position[0] + (curX / len) * 1.0001 * rx;
+                        current[2] = hitObstacle.position[2] + (curZ / len) * 1.0001 * rz;
+                    }
+                } else {
+                    current[0] += remaining[0];
+                    current[2] += remaining[2];
+                    remaining = [0, 0, 0];
+                    break;
+                }
+            }
+
+            for (const obs of this.obstacles) {
+                if (!obs.isActive()) continue;
+                const rx = obs.radius + HULL_HALF_WIDTH;
+                const rz = obs.radius + HULL_HALF_LENGTH;
+                const x = (current[0] - obs.position[0]) / rx;
+                const z = (current[2] - obs.position[2]) / rz;
+                const dist = Math.hypot(x, z);
+                if (dist < 1.0) {
+                    const nx = dist > 1e-8 ? x / dist : 0;
+                    const nz = dist > 1e-8 ? z / dist : 1.0001;
+                    current[0] = obs.position[0] + nx * 1.0001 * rx;
+                    current[2] = obs.position[2] + nz * 1.0001 * rz;
+                }
+            }
+
+            return [current[0], startPosition[1] + movement[1], current[2]];
+        }
+
+        lineOfSight(from, to, ignoredId = null) {
+            const rx = to[0] - from[0];
+            const rz = to[2] - from[2];
+            const rayLen = Math.hypot(rx, rz);
+            if (rayLen < 1e-5) return true;
+
+            const dirX = rx / rayLen;
+            const dirZ = rz / rayLen;
+
+            for (const obs of this.obstacles) {
+                if (!obs.isActive() || obs.id === ignoredId) continue;
+                const ocX = obs.position[0] - from[0];
+                const ocZ = obs.position[2] - from[2];
+                const proj = ocX * dirX + ocZ * dirZ;
+
+                if (proj > 0 && proj < rayLen) {
+                    const perpDistSq = (ocX * ocX + ocZ * ocZ) - (proj * proj);
+                    if (perpDistSq < obs.radius * obs.radius) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+    }
+
+    if (!global.CollisionSystem) {
+        global.CollisionSystem = InternalCollisionSystem;
+    }
+
     const SITES = Object.freeze([
         { id: 'journal', title: 'The drifting journal', position: [8, -2.7, 43], color: [0.64, 0.44, 0.21],
             text: 'The last entry ends mid-sentence: “The compass lies near the stones. Keep the pale beacon ahead. If the eyes open, the lantern can bear witness.”' },
         { id: 'stone', title: 'The tide-marked stone', position: [-9, -1.4, 17], color: [0.29, 0.28, 0.24], collisionRadius: 1.25,
             text: 'A weathered inscription: “Three pillars keep the threshold. The sea remembers every visitor. What you choose to illuminate will remember you.”' }
     ]);
+
     class DiscoverySystem {
-        constructor() { this.reset(); }
-        reset() { this.found = new Set(); }
-        get sites() { return SITES; }
+        constructor(collisionSystem = null) {
+            this.collision = collisionSystem || new global.CollisionSystem();
+            this.reset();
+        }
+
+        reset() {
+            this.found = new Set();
+        }
+
+        get sites() {
+            return SITES;
+        }
+
         moveShip(position, movement) {
-            const result = [...position];
-            let remaining = [...movement];
-            for (const site of SITES) {
-                if (!site.collisionRadius) continue;
-                // The hull stays aligned with world axes; include its width and length.
-                const rx = site.collisionRadius + 2;
-                const rz = site.collisionRadius + 4.7;
-                let x = (result[0] - site.position[0]) / rx;
-                let z = (result[2] - site.position[2]) / rz;
-                const distance = Math.hypot(x, z);
-                if (distance < 1) {
-                    // Recover cleanly if an older scene starts inside the obstacle.
-                    x = distance > 1e-8 ? x / distance * 1.0001 : 0;
-                    z = distance > 1e-8 ? z / distance * 1.0001 : 1.0001;
+            return this.collision.moveShip(position, movement);
+        }
+
+        isAvailable(site, position, front = null) {
+            const dx = site.position[0] - position[0];
+            const dz = site.position[2] - position[2];
+            const distance = Math.hypot(dx, dz);
+            if (distance > 18) return false;
+
+            if (front) {
+                const frontLen = Math.hypot(front[0], front[2]);
+                if (frontLen > 1e-4 && distance > 1e-4) {
+                    const dot = (front[0] * dx + front[2] * dz) / (frontLen * distance);
+                    if (dot < 0.2) return false;
                 }
-                let dx = remaining[0] / rx;
-                let dz = remaining[2] / rz;
-                const a = dx * dx + dz * dz;
-                const b = x * dx + z * dz;
-                const discriminant = b * b - a * (x * x + z * z - 1);
-                if (a > 0 && b < 0 && discriminant >= 0) {
-                    const hit = (-b - Math.sqrt(discriminant)) / a;
-                    if (hit >= 0 && hit <= 1) {
-                        x += dx * hit; z += dz * hit;
-                        const length = Math.hypot(x, z);
-                        const nx = x / length, nz = z / length;
-                        dx *= 1 - hit; dz *= 1 - hit;
-                        const inward = Math.min(0, dx * nx + dz * nz);
-                        dx -= inward * nx; dz -= inward * nz;
-                        x = nx * 1.0001; z = nz * 1.0001;
-                    }
-                }
-                result[0] = site.position[0] + x * rx;
-                result[2] = site.position[2] + z * rz;
-                remaining = [dx * rx, remaining[1], dz * rz];
             }
-            return [result[0] + remaining[0], result[1] + remaining[1], result[2] + remaining[2]];
+
+            if (this.collision && typeof this.collision.lineOfSight === 'function') {
+                if (!this.collision.lineOfSight(position, site.position, site.id)) {
+                    return false;
+                }
+            }
+
+            return true;
         }
-        nearby(position) {
-            return SITES.filter((site) => Math.hypot(position[0] - site.position[0], position[2] - site.position[2]) <= 18);
+
+        nearby(position, front = null) {
+            return SITES.filter((site) => this.isAvailable(site, position, front));
         }
-        inspect(id, position) {
-            const site = this.nearby(position).find((item) => item.id === id);
+
+        inspect(id, position, front = null) {
+            const site = this.nearby(position, front).find((item) => item.id === id);
             if (site) this.found.add(id);
             return site || null;
         }
+
         static aligned(front, toTarget) {
             const length = Math.hypot(...front) * Math.hypot(...toTarget);
             return length > 0 && (front[0] * toTarget[0] + front[1] * toTarget[1] + front[2] * toTarget[2]) / length > 0.965;
         }
     }
+
     global.DiscoverySystem = DiscoverySystem;
 }(window));
