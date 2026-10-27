@@ -6,6 +6,8 @@ Bu projede geliştirme aşamalarının adı **ritüel**. VIII–XV kod, otomatik
 
 Araştırma, emsaller ve mevcut kod bulguları: [Araştırma ve geliştirme önerisi](RESEARCH_AND_ROADMAP.md).
 
+28 Ekim 2026 devir kararı: Sonraki uygulamayı AG yapacak, bağımsız son QA'yı Codex yürütecek. Yeni XX–XXIX sırası, ilk teslim kapsamı ve ertelenen işler [AG geliştirme haritasında](AG_ROADMAP.md); çalışma sözleşmesi [uygulama kılavuzunda](AG_IMPLEMENTATION_GUIDE.md), son test ölçütleri [QA kabul planında](QA_ACCEPTANCE_PLAN.md). Bu belgeler plan/devirdir; yeni işlerin veya QA'nın tamamlandığı anlamına gelmez.
+
 ## Hedef
 
 Tek teknede, pusula, keşif ve fener üzerine kurulu kısa bir kozmik korku deneyimi. İlk oynanış için 5–10 dakika tasarım hedefi; gerçek süre kullanıcı testleriyle belirlenecek. Mevcut WebGL 2 altyapısı korunur.
