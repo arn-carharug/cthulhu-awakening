@@ -625,7 +625,8 @@ function drawScene(timestamp) {
     const torchFlicker = 0.965
         + Math.sin(STATE.elapsedTime * 17.3) * 0.018
         + Math.sin(STATE.elapsedTime * 31.7) * 0.012
-        + STATE.cinematic.torchShock * Math.sin(STATE.elapsedTime * 74.0) * (comfortSettings.lightningScale < 1 ? 0 : 0.24);
+        // The reveal shock makes the lantern gutter once and recover (no ~12 Hz strobe: WCAG 2.3.1).
+        - STATE.cinematic.torchShock * (comfortSettings.lightningScale < 1 ? 0 : 0.24);
     gl.uniform1f(
         STATE.uTorchLightIntensityLoc,
         STATE.torchLit && STATE.effects.lighting ? STATE.torchLightIntensity * torchFlicker : 0.0
