@@ -103,7 +103,7 @@ assets/audio/narration/        Narration audio clips (MP3), clean sources (WAV),
 ## Rendering & Performance Notes
 
 - WebGL 2, VAOs, VBOs, and indexed drawing are used directly without external 3D libraries.
-- Pre-allocated `FRAME_BUFFERS` pool eliminates per-frame garbage-collection spikes during the render loop.
+- The render loop reuses pre-allocated matrices and vectors (`FRAME_BUFFERS`, `FRAME_CONSTANTS`, and the renderer's scratch buffers). `scripts/ritual-34.test.js` runs the real `drawScene()` with a stubbed WebGL context and verifies that it creates no gl-matrix buffers per frame while sailing, inspecting the compass, during the awakening, or with the lantern lit. Plain JS objects (for example navigation samples) are still created per frame. This is an allocation count, not a browser GC profile: no measured GC pause or FPS gain is claimed from it.
 - `DOM_CACHE` throttles HUD text and style writes, preventing browser layout thrashing.
 - Baseline measurements on an integrated GPU (`Intel UHD Graphics`, 1080p Medium, DPR 1):
   - Normal voyage: **107.11 FPS**, mean frame time **9.34 ms**, p95 **14.10 ms**.
@@ -137,7 +137,7 @@ Get-ChildItem -Path "js/*.js", "scripts/*.js" | ForEach-Object { node --check $_
 # 2. Static asset and model buffer integrity validation
 node scripts/validate.js
 
-# 3. Full automated test suite (60 regression tests)
+# 3. Full automated regression test suite
 node --test scripts/ritual-*.test.js
 
 # 4. Start local server

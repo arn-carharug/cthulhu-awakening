@@ -308,7 +308,7 @@ test('comfort settings actually suppress 3D boat motion and camera shake', () =>
     scene.STATE.cinematic.shake = 1;
     scene.updateBoatMotion();
     assert.notEqual(scene.STATE.boatMotion.bob, 0);
-    const movingCamera = scene.getCameraPosition();
+    const movingCamera = [...scene.getCameraPosition()]; // getter returns a reused buffer
     scene.comfortSettings.set('reduceBoat', true);
     scene.comfortSettings.set('reduceShake', true);
     scene.updateBoatMotion();

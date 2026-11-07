@@ -207,8 +207,35 @@ const FRAME_BUFFERS = {
     toHead: glMatrix.vec3.create(),
     modelOrigin: glMatrix.vec4.fromValues(0, 0, 0, 1),
     transformedOrigin: glMatrix.vec4.create(),
-    emitter: glMatrix.vec3.create()
+    emitter: glMatrix.vec3.create(),
+    identityMatrix: glMatrix.mat4.create(),
+    translation: glMatrix.vec3.create(),
+    inspectPosition: glMatrix.vec3.create(),
+    fogColor: glMatrix.vec3.create()
 };
+
+// Constant per-frame operands, allocated once instead of as literals inside drawScene.
+const FRAME_CONSTANTS = Object.freeze({
+    calmFog: Object.freeze([0.028, 0.055, 0.07]),
+    torchLightColor: Object.freeze([1.0, 0.7, 0.2]),
+    idleTorchScale: Object.freeze([0.3, 0.3, 0.3]),
+    compassScale: Object.freeze([0.1, 0.1, 0.1]),
+    inspectCompassScale: Object.freeze([0.2, 0.2, 0.2]),
+    pillarScale: Object.freeze([500.2, 500.2, 500.2]),
+    omenMoments: Object.freeze({
+        'black-tide': Object.freeze([10, 'The tide pulls against the wind.']),
+        'red-wake': Object.freeze([17, 'A second wake crosses your own.']),
+        'drowned-star': Object.freeze([22, 'A drowned star flickers below the keel.']),
+        'hollow-calm': Object.freeze([31, 'For a moment, the sea becomes perfectly still.'])
+    })
+});
+
+// Writes x, y, z into the shared translation scratch vector and returns it.
+function frameTranslation(x, y, z) {
+    const out = FRAME_BUFFERS.translation;
+    out[0] = x; out[1] = y; out[2] = z;
+    return out;
+}
 
 // Throttled DOM cache to eliminate layout thrashing
 const DOM_CACHE = {
@@ -304,7 +331,7 @@ function getWaveSettings() { return sceneRenderer.getWaveSettings(); }
 function getCameraPosition() { return sceneRenderer.getCameraPosition(); }
 function getTorchPosition() { return sceneRenderer.getTorchPosition(); }
 function getCompassPosition() { return sceneRenderer.getCompassPosition(); }
-function getFPSTorchMatrix() { return sceneRenderer.getFPSTorchMatrix(); }
+function getFPSTorchMatrix(out) { return sceneRenderer.getFPSTorchMatrix(out); }
 function getTorchLightWorldPosition() {
     STATE.vec4.transformMat4(FRAME_BUFFERS.transformedOrigin, FRAME_BUFFERS.modelOrigin, STATE.torchMatrix);
     FRAME_BUFFERS.emitter[0] = FRAME_BUFFERS.transformedOrigin[0];
@@ -477,13 +504,7 @@ function drawScene(timestamp) {
     STATE.cinematic.shake = Math.max(0, STATE.cinematic.shake - deltaSeconds * 0.22);
     STATE.cinematic.torchShock = Math.max(0, STATE.cinematic.torchShock - deltaSeconds * 0.38);
     if (STATE.effects.animation) STATE.awakeningTimeline.update(deltaSeconds);
-    const omenMoments = {
-        'black-tide': [10, 'The tide pulls against the wind.'],
-        'red-wake': [17, 'A second wake crosses your own.'],
-        'drowned-star': [22, 'A drowned star flickers below the keel.'],
-        'hollow-calm': [31, 'For a moment, the sea becomes perfectly still.']
-    };
-    const omenMoment = omenMoments[STATE.omen.id];
+    const omenMoment = FRAME_CONSTANTS.omenMoments[STATE.omen.id];
     if (!STATE.omenEventPlayed && STATE.awakeningTimeline.elapsed >= omenMoment[0]) {
         STATE.omenEventPlayed = true;
         ritualPresentation.show(omenMoment[1], 3200);
@@ -524,7 +545,7 @@ function drawScene(timestamp) {
 
     // 2. View & camera (reusing FRAME_BUFFERS)
     updateBoatMotion();
-    let cameraPosition = getCameraPosition();
+    const cameraPosition = getCameraPosition();
     STATE.vec3.add(FRAME_BUFFERS.cameraTarget, cameraPosition, STATE.cameraFront);
     STATE.mat4.lookAt(FRAME_BUFFERS.viewMatrix, cameraPosition, FRAME_BUFFERS.cameraTarget, STATE.cameraUp);
     gl.uniformMatrix4fv(STATE.uViewLoc, false, FRAME_BUFFERS.viewMatrix);
@@ -532,11 +553,12 @@ function drawScene(timestamp) {
     gl.uniform3fv(STATE.uCameraPosLoc, cameraPosition);
     gl.uniform2f(STATE.uResolutionLoc, STATE.canvas.width, STATE.canvas.height);
     gl.uniform1i(STATE.uFogEnabledLoc, STATE.effects.fog ? 1 : 0);
-    const calmFog = [0.028, 0.055, 0.07];
     const omenFog = STATE.omen.fogColor;
-    const fogColor = STATE.awakeningStarted
-        ? omenFog
-        : calmFog.map((value, index) => value * 0.72 + omenFog[index] * 0.28);
+    let fogColor = omenFog;
+    if (!STATE.awakeningStarted) {
+        fogColor = FRAME_BUFFERS.fogColor;
+        for (let i = 0; i < 3; i++) fogColor[i] = FRAME_CONSTANTS.calmFog[i] * 0.72 + omenFog[i] * 0.28;
+    }
     gl.uniform1f(STATE.uFogDensityLoc, (STATE.awakeningStarted ? 0.021 : 0.012) * STATE.omen.fogDensity);
     gl.uniform3fv(STATE.uFogColorLoc, fogColor);
     gl.uniform1i(STATE.uPostEnabledLoc, STATE.effects.post ? 1 : 0);
@@ -558,16 +580,16 @@ function drawScene(timestamp) {
     gl.uniform3fv(STATE.uLightningColorLoc, STATE.omen.lightningColor);
 
     if (STATE.torchLit) {
-        STATE.torchMatrix = getFPSTorchMatrix();
+        getFPSTorchMatrix(STATE.torchMatrix);
     } else {
         STATE.mat4.identity(STATE.torchMatrix);
-        STATE.mat4.translate(STATE.torchMatrix, STATE.torchMatrix, [
+        STATE.mat4.translate(STATE.torchMatrix, STATE.torchMatrix, frameTranslation(
             STATE.shipPosition[0] + 0.8,
             STATE.shipPosition[1] + STATE.boatMotion.bob,
             STATE.shipPosition[2] - 1.1
-        ]);
+        ));
         STATE.mat4.rotateX(STATE.torchMatrix, STATE.torchMatrix, -Math.PI / 8);
-        STATE.mat4.scale(STATE.torchMatrix, STATE.torchMatrix, [0.3, 0.3, 0.3]);
+        STATE.mat4.scale(STATE.torchMatrix, STATE.torchMatrix, FRAME_CONSTANTS.idleTorchScale);
     }
 
     // 4. Uniforms and clear
@@ -588,9 +610,8 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uIsWaterLoc, 1);
     gl.bindVertexArray(STATE.waterVAO);
     STATE.mat4.identity(FRAME_BUFFERS.waterModelMatrix);
-    STATE.mat4.translate(FRAME_BUFFERS.waterModelMatrix, FRAME_BUFFERS.waterModelMatrix, [
-        STATE.shipPosition[0], -3.5, STATE.shipPosition[2]
-    ]);
+    STATE.mat4.translate(FRAME_BUFFERS.waterModelMatrix, FRAME_BUFFERS.waterModelMatrix,
+        frameTranslation(STATE.shipPosition[0], -3.5, STATE.shipPosition[2]));
     gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.waterModelMatrix);
     gl.drawElements(gl.TRIANGLES, STATE.waterIndexCount, gl.UNSIGNED_INT, 0);
     gl.uniform1i(STATE.uUseTextureLoc, 0);
@@ -609,7 +630,7 @@ function drawScene(timestamp) {
         STATE.uTorchLightIntensityLoc,
         STATE.torchLit && STATE.effects.lighting ? STATE.torchLightIntensity * torchFlicker : 0.0
     );
-    gl.uniform3fv(STATE.uTorchLightColorLoc, [1.0, 0.7, 0.2]);
+    gl.uniform3fv(STATE.uTorchLightColorLoc, FRAME_CONSTANTS.torchLightColor);
     gl.uniform3fv(STATE.uTorchDirectionLoc, STATE.cameraFront);
 
     // Awakening triggers and pillar collision activation
@@ -641,7 +662,7 @@ function drawScene(timestamp) {
             STATE.mat4.rotateY(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, spinAge * (2.8 + Math.min(spinAge, 8) * 0.16));
             STATE.mat4.rotateZ(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, Math.sin(spinAge * 4.5) * 0.08);
         }
-        STATE.mat4.scale(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, [0.1, 0.1, 0.1]);
+        STATE.mat4.scale(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, FRAME_CONSTANTS.compassScale);
         gl.bindVertexArray(STATE.compassVAO);
         gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.compassMatrix);
         gl.uniform1i(STATE.uCompassHoveredLoc, STATE.compassHovered ? 1 : 0);
@@ -664,13 +685,11 @@ function drawScene(timestamp) {
         gl.uniform1i(STATE.uIsCompassLoc, 0);
     } else {
         STATE.mat4.identity(FRAME_BUFFERS.compassMatrix);
-        let cameraPos = getCameraPosition();
-        let inspectPos = STATE.vec3.create();
-        STATE.vec3.scaleAndAdd(inspectPos, cameraPos, STATE.cameraFront, 1.0);
+        const inspectPos = STATE.vec3.scaleAndAdd(FRAME_BUFFERS.inspectPosition, getCameraPosition(), STATE.cameraFront, 1.0);
         STATE.mat4.translate(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, inspectPos);
         STATE.mat4.rotateY(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, STATE.compassYaw);
         STATE.mat4.rotateX(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, -Math.PI / 2 + STATE.compassPitch);
-        STATE.mat4.scale(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, [0.2, 0.2, 0.2]);
+        STATE.mat4.scale(FRAME_BUFFERS.compassMatrix, FRAME_BUFFERS.compassMatrix, FRAME_CONSTANTS.inspectCompassScale);
 
         gl.bindVertexArray(STATE.compassVAO);
         gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.compassMatrix);
@@ -688,7 +707,8 @@ function drawScene(timestamp) {
         gl.uniform1i(STATE.uUseTextureLoc, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, STATE.compassNeedleEBO);
         STATE.mat4.copy(FRAME_BUFFERS.needleMatrix, FRAME_BUFFERS.compassMatrix);
-        STATE.mat4.rotateY(FRAME_BUFFERS.needleMatrix, FRAME_BUFFERS.needleMatrix, -navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).heading + navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime).needleAngle);
+        const needleSample = navigation.sample(STATE.shipPosition, STATE.cameraFront, STATE.elapsedTime);
+        STATE.mat4.rotateY(FRAME_BUFFERS.needleMatrix, FRAME_BUFFERS.needleMatrix, -needleSample.heading + needleSample.needleAngle);
         gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.needleMatrix);
         gl.drawElements(gl.TRIANGLES, STATE.compassNeedleIndexCount, STATE.compassNeedleIndexType, 0);
         gl.uniform1i(STATE.uIsCompassLoc, 0);
@@ -703,11 +723,8 @@ function drawScene(timestamp) {
     gl.uniform1i(STATE.uIsShipLoc, 1);
     gl.bindVertexArray(STATE.shipVAO);
     STATE.mat4.identity(FRAME_BUFFERS.shipModelMatrix);
-    STATE.mat4.translate(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, [
-        STATE.shipPosition[0],
-        STATE.shipPosition[1] + STATE.boatMotion.bob,
-        STATE.shipPosition[2]
-    ]);
+    STATE.mat4.translate(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix,
+        frameTranslation(STATE.shipPosition[0], STATE.shipPosition[1] + STATE.boatMotion.bob, STATE.shipPosition[2]));
     STATE.mat4.rotateZ(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, STATE.boatMotion.roll);
     STATE.mat4.rotateX(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, STATE.boatMotion.pitch);
     STATE.mat4.rotateX(FRAME_BUFFERS.shipModelMatrix, FRAME_BUFFERS.shipModelMatrix, Math.PI / 2);
@@ -720,8 +737,8 @@ function drawScene(timestamp) {
     // Discoveries
     gl.bindVertexArray(STATE.discoveryVAO);
     gl.uniform1i(STATE.uIsDiscoveryLoc, 1);
-    gl.uniform3fv(STATE.uStoneOriginLoc, discoveries.sites.find((site) => site.id === 'stone').position);
-    gl.uniformMatrix4fv(STATE.uModelLoc, false, STATE.mat4.create());
+    gl.uniform3fv(STATE.uStoneOriginLoc, worldConfig.stonePosition);
+    gl.uniformMatrix4fv(STATE.uModelLoc, false, FRAME_BUFFERS.identityMatrix);
     gl.drawArrays(gl.TRIANGLES, 0, STATE.discoveryCount);
     gl.uniform1i(STATE.uIsDiscoveryLoc, 0);
 
@@ -735,10 +752,9 @@ function drawScene(timestamp) {
     for (let i = 0; i < pillarPositions.length; i++) {
         const base = pillarPositions[i];
         STATE.mat4.identity(FRAME_BUFFERS.pillarsMatrix);
-        STATE.mat4.translate(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, [
-            base[0], base[1] + pillarsRiseY, base[2]
-        ]);
-        STATE.mat4.scale(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, [500.2, 500.2, 500.2]);
+        STATE.mat4.translate(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix,
+            frameTranslation(base[0], base[1] + pillarsRiseY, base[2]));
+        STATE.mat4.scale(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, FRAME_CONSTANTS.pillarScale);
         STATE.mat4.rotateX(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, Math.PI / 2);
         STATE.mat4.rotateZ(FRAME_BUFFERS.pillarsMatrix, FRAME_BUFFERS.pillarsMatrix, Math.PI / 2);
         gl.bindVertexArray(STATE.pillarsVAO);
@@ -751,10 +767,10 @@ function drawScene(timestamp) {
     const CTHULHU_Z = worldConfig.creatureBasePosition[2] + STATE.omen.creatureOffset[1];
     const CTHULHU_INITIAL_Y = worldConfig.creatureBasePosition[1];
     STATE.mat4.identity(FRAME_BUFFERS.cthulhuMatrix);
-    STATE.mat4.translate(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix, [
-        CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y, CTHULHU_Z
-    ]);
-    STATE.mat4.scale(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix, [CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE]);
+    STATE.mat4.translate(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix,
+        frameTranslation(CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y, CTHULHU_Z));
+    STATE.mat4.scale(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix,
+        frameTranslation(CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE));
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, STATE.cthulhuTexture);
     gl.uniform1i(STATE.uTextureLoc, 3);
@@ -803,9 +819,8 @@ function drawScene(timestamp) {
     // Dust particles (reusing FRAME_BUFFERS.particleMatrix)
     if (STATE.effects.particles) {
         STATE.mat4.identity(FRAME_BUFFERS.particleMatrix);
-        STATE.mat4.translate(FRAME_BUFFERS.particleMatrix, FRAME_BUFFERS.particleMatrix, [
-            STATE.shipPosition[0], STATE.shipPosition[1] + 1.2 + STATE.boatMotion.bob, STATE.shipPosition[2]
-        ]);
+        STATE.mat4.translate(FRAME_BUFFERS.particleMatrix, FRAME_BUFFERS.particleMatrix,
+            frameTranslation(STATE.shipPosition[0], STATE.shipPosition[1] + 1.2 + STATE.boatMotion.bob, STATE.shipPosition[2]));
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.depthMask(false);

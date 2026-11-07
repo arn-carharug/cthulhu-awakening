@@ -2,10 +2,25 @@
     function toRadians(degrees) {
         return degrees * (Math.PI / 180);
     }
+    const WORLD_UP = Object.freeze([0, 1, 0]);
+    const FPS_TORCH_SCALE = Object.freeze([0.08, 0.08, 0.08]);
 
     class SceneRenderer {
         constructor(context) {
             this.ctx = context;
+            // Per-frame scratch storage. Getters below return these buffers instead of new arrays:
+            // callers must use a result before the next call to the same getter and must not keep it.
+            this.scratch = {
+                camera: [0, 0, 0],
+                front: [0, 0, 0],
+                right: [0, 0, 0],
+                up: [0, 0, 0],
+                torchPosition: [0, 0, 0],
+                torchLight: [0, 0, 0],
+                compass: [0, 0, 0],
+                torchMatrix: new Float32Array(16),
+                waves: { height: 0, speed: 0 }
+            };
         }
 
         get state() { return this.ctx.STATE; }
@@ -210,16 +225,18 @@
             const surge = S.cinematic?.surge ? Math.min(1, Math.max(0, (S.awakeningTimeline?.elapsed - 5) / 12)) : 0;
             const omenWaveHeight = S.omen?.waveHeight ?? 1.0;
             const omenWaveSpeed = S.omen?.waveSpeed ?? 1.0;
-            return {
-                height: S.effects?.water ? ocean.waveHeight * omenWaveHeight * (1 + surge * 1.05) : 0,
-                speed: ocean.waveSpeed * omenWaveSpeed
-            };
+            const waves = this.scratch.waves;
+            waves.height = S.effects?.water ? ocean.waveHeight * omenWaveHeight * (1 + surge * 1.05) : 0;
+            waves.speed = ocean.waveSpeed * omenWaveSpeed;
+            return waves;
         }
 
         updateBoatMotion() {
             const S = this.state;
             if (!S.effects?.boatMotion || !S.effects?.water || !this.comfort?.boatMotionEnabled) {
-                S.boatMotion = { bob: 0, roll: 0, pitch: 0 };
+                S.boatMotion.bob = 0;
+                S.boatMotion.roll = 0;
+                S.boatMotion.pitch = 0;
                 return;
             }
             const settings = this.getWaveSettings();
@@ -231,10 +248,12 @@
 
         getCameraPosition() {
             const S = this.state;
-            if (!S.vec3) return [S.shipPosition[0], S.shipPosition[1] + 1.2, S.shipPosition[2] + 0.3];
-            const cameraPosition = S.vec3.clone(S.shipPosition);
-            cameraPosition[1] += 1.2 + (S.boatMotion?.bob || 0) * 0.62;
-            cameraPosition[2] += 0.3;
+            const cameraPosition = this.scratch.camera;
+            cameraPosition[0] = S.shipPosition[0];
+            cameraPosition[1] = S.shipPosition[1] + 1.2;
+            cameraPosition[2] = S.shipPosition[2] + 0.3;
+            if (!S.vec3) return cameraPosition;
+            cameraPosition[1] += (S.boatMotion?.bob || 0) * 0.62;
             if (this.comfort?.cameraShakeEnabled && S.cinematic?.shake > 0.001) {
                 const shake = S.cinematic.shake;
                 cameraPosition[0] += Math.sin(S.elapsedTime * 31.0) * shake * 0.09;
@@ -244,110 +263,70 @@
             return cameraPosition;
         }
 
+        // Fills scratch.front/right/up with the normalized camera basis and returns the scratch object.
+        updateCameraBasis() {
+            const S = this.state;
+            const { front, right, up } = this.scratch;
+            S.vec3.normalize(front, S.cameraFront);
+            S.vec3.cross(right, front, WORLD_UP);
+            S.vec3.normalize(right, right);
+            S.vec3.cross(up, right, front);
+            S.vec3.normalize(up, up);
+            return this.scratch;
+        }
+
+        // out = camera + front * f + right * r + up * u
+        offsetFromCamera(out, forward, side, vertical) {
+            const S = this.state;
+            const { front, right, up } = this.updateCameraBasis();
+            S.vec3.copy(out, this.getCameraPosition());
+            S.vec3.scaleAndAdd(out, out, front, forward);
+            S.vec3.scaleAndAdd(out, out, right, side);
+            S.vec3.scaleAndAdd(out, out, up, vertical);
+            return out;
+        }
+
         getTorchPosition() {
             const S = this.state;
-            if (S.torchLit) {
-                const forwardDist = 1.2;
-                const rightDist = 0.5;
-                const downDist = -0.4;
-                const cameraPos = this.getCameraPosition();
-                const front = S.vec3.clone(S.cameraFront);
-                S.vec3.normalize(front, front);
-
-                const worldUp = [0, 1, 0];
-                const right = S.vec3.create();
-                S.vec3.cross(right, front, worldUp);
-                S.vec3.normalize(right, right);
-
-                const up = S.vec3.create();
-                S.vec3.cross(up, right, front);
-                S.vec3.normalize(up, up);
-
-                let torchPos = S.vec3.clone(cameraPos);
-                S.vec3.scaleAndAdd(torchPos, torchPos, front, forwardDist);
-                S.vec3.scaleAndAdd(torchPos, torchPos, right, rightDist);
-                S.vec3.scaleAndAdd(torchPos, torchPos, up, downDist);
-                return torchPos;
-            } else {
-                return [
-                    S.shipPosition[0] + 0.8,
-                    S.shipPosition[1] + (S.boatMotion?.bob || 0),
-                    S.shipPosition[2] - 1.2
-                ];
-            }
+            const out = this.scratch.torchPosition;
+            if (S.torchLit) return this.offsetFromCamera(out, 1.2, 0.5, -0.4);
+            out[0] = S.shipPosition[0] + 0.8;
+            out[1] = S.shipPosition[1] + (S.boatMotion?.bob || 0);
+            out[2] = S.shipPosition[2] - 1.2;
+            return out;
         }
 
         getCompassPosition() {
             const S = this.state;
-            return [
-                S.shipPosition[0] + 0.35,
-                S.shipPosition[1] + 0.65 + (S.boatMotion?.bob || 0),
-                S.shipPosition[2] - 1.0
-            ];
+            const out = this.scratch.compass;
+            out[0] = S.shipPosition[0] + 0.35;
+            out[1] = S.shipPosition[1] + 0.65 + (S.boatMotion?.bob || 0);
+            out[2] = S.shipPosition[2] - 1.0;
+            return out;
         }
 
-        getFPSTorchMatrix() {
+        // Writes the hand-held torch transform into `out` (defaults to a reused scratch matrix).
+        getFPSTorchMatrix(out = this.scratch.torchMatrix) {
             const S = this.state;
-            const torchMatrix = S.mat4.create();
-            S.mat4.identity(torchMatrix);
-
-            const cameraPos = this.getCameraPosition();
-            const front = S.vec3.clone(S.cameraFront);
-            S.vec3.normalize(front, front);
-
-            const worldUp = [0, 1, 0];
-            const right = S.vec3.create();
-            S.vec3.cross(right, front, worldUp);
-            S.vec3.normalize(right, right);
-
-            const up = S.vec3.create();
-            S.vec3.cross(up, right, front);
-            S.vec3.normalize(up, up);
-
-            let torchPos = S.vec3.clone(cameraPos);
-            S.vec3.scaleAndAdd(torchPos, torchPos, front, 0.45);
-            S.vec3.scaleAndAdd(torchPos, torchPos, right, 0.22);
-            S.vec3.scaleAndAdd(torchPos, torchPos, up, -0.18);
-
-            S.mat4.translate(torchMatrix, torchMatrix, torchPos);
-
-            const rotY = -Math.atan2(front[0], -front[2]);
-            const rotX = Math.asin(front[1]);
-            S.mat4.rotateY(torchMatrix, torchMatrix, rotY);
-            S.mat4.rotateX(torchMatrix, torchMatrix, rotX);
-            S.mat4.rotateX(torchMatrix, torchMatrix, -Math.PI / 8);
-            S.mat4.scale(torchMatrix, torchMatrix, [0.08, 0.08, 0.08]);
-            return torchMatrix;
+            S.mat4.identity(out);
+            const torchPos = this.offsetFromCamera(this.scratch.torchPosition, 0.45, 0.22, -0.18);
+            const front = this.scratch.front;
+            S.mat4.translate(out, out, torchPos);
+            S.mat4.rotateY(out, out, -Math.atan2(front[0], -front[2]));
+            S.mat4.rotateX(out, out, Math.asin(front[1]));
+            S.mat4.rotateX(out, out, -Math.PI / 8);
+            S.mat4.scale(out, out, FPS_TORCH_SCALE);
+            return out;
         }
 
         getTorchLightWorldPosition() {
             const S = this.state;
-            if (S.torchLit) {
-                const cameraPos = this.getCameraPosition();
-                const front = S.vec3.clone(S.cameraFront);
-                S.vec3.normalize(front, front);
-
-                const worldUp = [0, 1, 0];
-                const right = S.vec3.create();
-                S.vec3.cross(right, front, worldUp);
-                S.vec3.normalize(right, right);
-
-                const up = S.vec3.create();
-                S.vec3.cross(up, right, front);
-                S.vec3.normalize(up, up);
-
-                let lightPos = S.vec3.clone(cameraPos);
-                S.vec3.scaleAndAdd(lightPos, lightPos, front, 0.55);
-                S.vec3.scaleAndAdd(lightPos, lightPos, right, 0.22);
-                S.vec3.scaleAndAdd(lightPos, lightPos, up, 0.02);
-                return lightPos;
-            } else {
-                return [
-                    S.shipPosition[0] + 0.8,
-                    S.shipPosition[1] + (S.boatMotion?.bob || 0) + 0.5,
-                    S.shipPosition[2] - 1.1
-                ];
-            }
+            const out = this.scratch.torchLight;
+            if (S.torchLit) return this.offsetFromCamera(out, 0.55, 0.22, 0.02);
+            out[0] = S.shipPosition[0] + 0.8;
+            out[1] = S.shipPosition[1] + (S.boatMotion?.bob || 0) + 0.5;
+            out[2] = S.shipPosition[2] - 1.1;
+            return out;
         }
 
         getRayFromMouse(mouseX, mouseY, viewMatrix, projectionMatrix) {
