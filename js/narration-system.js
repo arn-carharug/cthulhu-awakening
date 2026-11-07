@@ -7,6 +7,10 @@
         'awakening.reveal': 5.8,
         'witness.begin': 8.0
     };
+    // Wall-clock limit for fetch + decode. Separate from the pause-aware TTL, which decides
+    // whether a loaded line is still relevant; this one decides that loading has failed.
+    const DEFAULT_LOAD_TIMEOUT_SECONDS = 15.0;
+    const UNAVAILABLE = 'Narration unavailable. The written text remains available.';
 
     class NarrationSystem {
         constructor(audio, catalog = global.NarrationCatalog, options = {}) {
@@ -18,6 +22,7 @@
             this.now = options.now || (() => (typeof this.audio?.context?.currentTime === 'number' ? this.audio.context.currentTime : (typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000)));
             this.setTimeout = options.setTimeout || global.setTimeout || (typeof setTimeout !== 'undefined' ? setTimeout : null);
             this.clearTimeout = options.clearTimeout || global.clearTimeout || (typeof clearTimeout !== 'undefined' ? clearTimeout : null);
+            this.loadTimeoutSeconds = options.loadTimeoutSeconds ?? DEFAULT_LOAD_TIMEOUT_SECONDS;
             this.language = catalog.defaultLanguage;
             this.enabled = true;
             this.volume = 0.8;
@@ -145,61 +150,55 @@
             this.current = clip;
             this.status('Loading narrator…');
 
-            const maxWaitSeconds = Number.isFinite(clip.ttl) ? Math.max(clip.ttl + 0.5, 4.0) : 15.0;
             if (this.setTimeout) {
                 const timeoutId = this.setTimeout(() => {
-                    if (this.current === clip && !clip.buffer) {
-                        clip.timedOut = true;
-                        clip.controller.abort();
-                    }
-                }, maxWaitSeconds * 1000);
+                    if (this.current !== clip || clip.buffer) return;
+                    // decodeAudioData ignores AbortSignal, so aborting alone cannot end the request.
+                    // Invalidate it here: clear Loading, release the slot, and let any late result be dropped.
+                    clip.timedOut = true;
+                    this.stop();
+                    this.status(UNAVAILABLE);
+                }, this.loadTimeoutSeconds * 1000);
                 if (timeoutId?.unref) timeoutId.unref();
                 clip.timeoutId = timeoutId;
             }
+
+            // Re-checked after every await: a newer line, stop(), reset() or the load timeout may have
+            // invalidated this request while it was suspended.
+            const valid = () => {
+                if (this.current !== clip || clip.timedOut || clip.controller.signal.aborted) return false;
+                if (this.isStale(clip)) {
+                    this.stop();
+                    return false;
+                }
+                return true;
+            };
+            const finish = (result) => {
+                if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
+                return result;
+            };
 
             try {
                 if (!this.cache.has(entry.file)) {
                     const response = await this.fetch(entry.file, { signal: clip.controller.signal });
                     if (!response.ok) throw new Error('Missing narration');
                     const bytes = await response.arrayBuffer();
-                    if (this.current !== clip) {
-                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
-                        return false;
-                    }
-                    if (this.isStale(clip)) {
-                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
-                        this.stop();
-                        return false;
-                    }
+                    if (!valid()) return finish(false);
                     const buffer = await this.audio.context.decodeAudioData(bytes);
-                    if (this.current !== clip) {
-                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
-                        return false;
-                    }
-                    if (this.isStale(clip)) {
-                        if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
-                        this.stop();
-                        return false;
-                    }
+                    if (!valid()) return finish(false);
                     this.cache.set(entry.file, buffer);
                 }
-                if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
-                if (this.current !== clip) return false;
-                if (this.isStale(clip)) {
-                    this.stop();
-                    return false;
-                }
+                if (!valid()) return finish(false);
+                finish();
                 clip.buffer = this.cache.get(entry.file);
                 this.sync();
                 return true;
             } catch {
-                if (clip.timeoutId && this.clearTimeout) this.clearTimeout(clip.timeoutId);
+                finish();
                 if (this.current === clip) {
                     const isAbort = clip.controller.signal.aborted || clip.timedOut;
                     this.stop();
-                    if (!isAbort) {
-                        this.status('Narration unavailable. The written text remains available.');
-                    }
+                    if (!isAbort) this.status(UNAVAILABLE);
                 }
                 return false;
             }
