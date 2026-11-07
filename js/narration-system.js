@@ -20,8 +20,10 @@
             this.status = options.status || (() => {});
             this.onCaption = options.caption || (() => {});
             this.now = options.now || (() => (typeof this.audio?.context?.currentTime === 'number' ? this.audio.context.currentTime : (typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000)));
-            this.setTimeout = options.setTimeout || global.setTimeout || (typeof setTimeout !== 'undefined' ? setTimeout : null);
-            this.clearTimeout = options.clearTimeout || global.clearTimeout || (typeof clearTimeout !== 'undefined' ? clearTimeout : null);
+            // Browser timers throw "Illegal invocation" when called with another receiver
+            // (this.setTimeout(...)), so the window versions must be bound to the global.
+            this.setTimeout = options.setTimeout || global.setTimeout?.bind(global) || null;
+            this.clearTimeout = options.clearTimeout || global.clearTimeout?.bind(global) || null;
             this.loadTimeoutSeconds = options.loadTimeoutSeconds ?? DEFAULT_LOAD_TIMEOUT_SECONDS;
             this.language = catalog.defaultLanguage;
             this.enabled = true;
