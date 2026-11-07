@@ -1,39 +1,32 @@
 (function exposeCollisionSystem(global) {
-    const HULL_HALF_WIDTH = 2.0;
-    const HULL_HALF_LENGTH = 4.7;
+    const world = () => {
+        const config = global.GameConfig?.world;
+        if (!config) throw new Error('CollisionSystem requires GameConfig.world (load js/config.js first).');
+        return config;
+    };
     const SKIN = 1.0001;
     const FALLBACK_SKIN = 1.0002;
     const FALLBACK_SAMPLES = 128;
     const RESOLVE_PASSES = 8;
 
     class CollisionSystem {
-        constructor() {
+        constructor(worldConfig = world()) {
             this.pillarsActive = false;
+            this.hull = { rx: worldConfig.boatHull.rx, rz: worldConfig.boatHull.rz };
+            const pillarIds = ['pillar_left', 'pillar_center', 'pillar_right'];
             this.obstacles = [
                 {
                     id: 'stone',
-                    position: [-9, -1.4, 17],
-                    radius: 1.25,
+                    position: [...worldConfig.stonePosition],
+                    radius: worldConfig.stoneRadius,
                     isActive: () => true
                 },
-                {
-                    id: 'pillar_left',
-                    position: [-50, 0, -30],
-                    radius: 3.2,
+                ...worldConfig.pillarPositions.map((position, index) => ({
+                    id: pillarIds[index] || `pillar_${index}`,
+                    position: [...position],
+                    radius: worldConfig.pillarRadius,
                     isActive: () => this.pillarsActive
-                },
-                {
-                    id: 'pillar_center',
-                    position: [0, 0, -30],
-                    radius: 3.2,
-                    isActive: () => this.pillarsActive
-                },
-                {
-                    id: 'pillar_right',
-                    position: [50, 0, -30],
-                    radius: 3.2,
-                    isActive: () => this.pillarsActive
-                }
+                }))
             ];
         }
 
@@ -46,9 +39,9 @@
         }
 
         // Normalized ellipse distance between the hull centre and an obstacle; < 1 means overlap.
-        static clearance(obs, position) {
-            const rx = obs.radius + HULL_HALF_WIDTH;
-            const rz = obs.radius + HULL_HALF_LENGTH;
+        clearance(obs, position) {
+            const rx = obs.radius + this.hull.rx;
+            const rz = obs.radius + this.hull.rz;
             return Math.hypot((position[0] - obs.position[0]) / rx, (position[2] - obs.position[2]) / rz);
         }
 
@@ -57,7 +50,7 @@
         }
 
         isClear(position, obstacles = this.activeObstacles()) {
-            return obstacles.every((obs) => CollisionSystem.clearance(obs, position) >= 1.0);
+            return obstacles.every((obs) => this.clearance(obs, position) >= 1.0);
         }
 
         // Pushes `position` (mutated in place) out of every active obstacle so the result is valid for
@@ -69,8 +62,8 @@
             for (let pass = 0; pass < RESOLVE_PASSES; pass++) {
                 let moved = false;
                 for (const obs of obstacles) {
-                    const rx = obs.radius + HULL_HALF_WIDTH;
-                    const rz = obs.radius + HULL_HALF_LENGTH;
+                    const rx = obs.radius + this.hull.rx;
+                    const rz = obs.radius + this.hull.rz;
                     const x = (position[0] - obs.position[0]) / rx;
                     const z = (position[2] - obs.position[2]) / rz;
                     const dist = Math.hypot(x, z);
@@ -88,8 +81,8 @@
             let best = null;
             let bestDistSq = Infinity;
             for (const obs of obstacles) {
-                const rx = (obs.radius + HULL_HALF_WIDTH) * FALLBACK_SKIN;
-                const rz = (obs.radius + HULL_HALF_LENGTH) * FALLBACK_SKIN;
+                const rx = (obs.radius + this.hull.rx) * FALLBACK_SKIN;
+                const rz = (obs.radius + this.hull.rz) * FALLBACK_SKIN;
                 for (let k = 0; k < FALLBACK_SAMPLES; k++) {
                     const angle = (k / FALLBACK_SAMPLES) * Math.PI * 2;
                     const candidate = [obs.position[0] + Math.sin(angle) * rx, position[1], obs.position[2] + Math.cos(angle) * rz];
@@ -121,8 +114,8 @@
 
                 for (const obs of this.obstacles) {
                     if (!obs.isActive()) continue;
-                    const rx = obs.radius + HULL_HALF_WIDTH;
-                    const rz = obs.radius + HULL_HALF_LENGTH;
+                    const rx = obs.radius + this.hull.rx;
+                    const rz = obs.radius + this.hull.rz;
                     const x = (current[0] - obs.position[0]) / rx;
                     const z = (current[2] - obs.position[2]) / rz;
 
@@ -146,8 +139,8 @@
                 }
 
                 if (hitObstacle && hitNormal) {
-                    const rx = hitObstacle.radius + HULL_HALF_WIDTH;
-                    const rz = hitObstacle.radius + HULL_HALF_LENGTH;
+                    const rx = hitObstacle.radius + this.hull.rx;
+                    const rz = hitObstacle.radius + this.hull.rz;
 
                     current[0] += remaining[0] * earliestHit;
                     current[2] += remaining[2] * earliestHit;

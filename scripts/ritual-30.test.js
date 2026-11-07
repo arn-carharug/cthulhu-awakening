@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..');
 function loadContext() {
     const context = vm.createContext({});
     context.window = context;
-    for (const name of ['collision-system', 'discovery-system']) {
+    for (const name of ['config', 'collision-system', 'discovery-system']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${name}.js`), 'utf8'), context);
     }
     return context;
@@ -18,7 +18,7 @@ function loadContext() {
 
 const clearances = (collision, p) => collision.obstacles
     .filter((obs) => obs.isActive())
-    .map((obs) => ({ id: obs.id, value: collision.constructor.clearance(obs, p) }));
+    .map((obs) => ({ id: obs.id, value: collision.clearance(obs, p) }));
 
 function assertClearOfAll(collision, p, label) {
     for (const { id, value } of clearances(collision, p)) {

@@ -104,7 +104,7 @@ test('shared GameConfig.world defines single source of truth for landmarks and c
     assert.deepEqual([...config.world.ruinsPosition], [0, 0, -30]);
     assert.deepEqual([...config.world.initialShipPosition], [10, 0, 60]);
     assert.deepEqual([...config.world.stonePosition], [-9, -1.4, 17]);
-    assert.deepEqual([...config.world.journalPosition], [12, -1.4, 5]);
+    assert.deepEqual([...config.world.journalPosition], [8, -2.7, 43], 'matches the journal players actually find');
     assert.equal(config.world.cthulhuScale, 25);
     assert.equal(config.world.pillarRadius, 3.2);
 

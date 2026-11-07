@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 function createCollisionContext() {
     const context = vm.createContext({});
     context.window = context;
-    for (const name of ['collision-system', 'discovery-system']) {
+    for (const name of ['config', 'collision-system', 'discovery-system']) {
         vm.runInContext(fs.readFileSync(path.join(root, 'js', `${name}.js`), 'utf8'), context);
     }
     const collision = new context.CollisionSystem();

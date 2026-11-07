@@ -11,17 +11,7 @@ const cameraConfig = gameConfig.camera || { fov: Math.PI / 4, near: 0.1, far: 50
 const awakeningConfig = gameConfig.awakening || { duration: 42, pillars: { start: 5, duration: 10, distance: 25 }, cthulhu: { start: 12, duration: 28, distance: 80 } };
 const torchConfig = gameConfig.torch || { defaultIntensity: 5, automaticIntensity: 6, manualMax: 12 };
 const oceanConfig = gameConfig.ocean || { waveHeight: 0.72, waveSpeed: 0.82, foamThreshold: 0.48 };
-const worldConfig = gameConfig.world || {
-    initialShipPosition: [10, 0, 60],
-    ruinsPosition: [0, 0, -30],
-    cthulhuScale: 25,
-    pillarPositions: [[-50, 0, -30], [0, 0, -30], [50, 0, -30]],
-    pillarRadius: 3.2,
-    stonePosition: [-9, -1.4, 17],
-    stoneRadius: 1.25,
-    journalPosition: [12, -1.4, 5],
-    boatHull: { rx: 2.0, rz: 4.7 }
-};
+const worldConfig = gameConfig.world;
 
 const sceneControls = new window.SceneControls();
 const sceneEvents = new window.SceneRuntime.EventBus();
@@ -757,9 +747,9 @@ function drawScene(timestamp) {
     }
 
     // Cthulhu (reusing FRAME_BUFFERS.cthulhuMatrix)
-    const CTHULHU_X = STATE.omen.creatureOffset[0];
-    const CTHULHU_Z = -80 + STATE.omen.creatureOffset[1];
-    const CTHULHU_INITIAL_Y = -75;
+    const CTHULHU_X = worldConfig.creatureBasePosition[0] + STATE.omen.creatureOffset[0];
+    const CTHULHU_Z = worldConfig.creatureBasePosition[2] + STATE.omen.creatureOffset[1];
+    const CTHULHU_INITIAL_Y = worldConfig.creatureBasePosition[1];
     STATE.mat4.identity(FRAME_BUFFERS.cthulhuMatrix);
     STATE.mat4.translate(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix, [
         CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y, CTHULHU_Z

@@ -2,7 +2,8 @@
     const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle)) || 0;
     class VoyageNavigation {
         sample(position, front, time) {
-            const dx = -position[0], dz = -30 - position[2];
+            const ruins = global.GameConfig.world.ruinsPosition;
+            const dx = ruins[0] - position[0], dz = ruins[2] - position[2];
             const distance = Math.hypot(dx, dz);
             const heading = Math.atan2(front[0], -front[2]);
             const bearing = Math.atan2(dx, -dz);

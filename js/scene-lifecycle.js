@@ -43,8 +43,7 @@
         reset(advanceCycle = false) {
             const S = this.state;
             const doc = global.document;
-            const world = global.GameConfig?.world;
-            const initialPos = world?.initialShipPosition || [10, 0, 60];
+            const initialPos = global.GameConfig.world.initialShipPosition;
 
             this.controls?.clear();
             if (S.vec3) {

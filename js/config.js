@@ -5,6 +5,8 @@
         high: Object.freeze({ label: 'High', dpr: 2, waterSegments: 200, particles: 320, usePBR: true })
     });
 
+    // Single source of world geometry. Rendering, discovery, collision and navigation all read
+    // from here; no module keeps its own copy of these coordinates.
     const WORLD = Object.freeze({
         initialShipPosition: Object.freeze([10, 0, 60]),
         ruinsPosition: Object.freeze([0, 0, -30]),
@@ -17,7 +19,8 @@
         pillarRadius: 3.2,
         stonePosition: Object.freeze([-9, -1.4, 17]),
         stoneRadius: 1.25,
-        journalPosition: Object.freeze([12, -1.4, 5]),
+        journalPosition: Object.freeze([8, -2.7, 43]),
+        creatureBasePosition: Object.freeze([0, -75, -80]),
         boatHull: Object.freeze({ rx: 2.0, rz: 4.7 })
     });
 

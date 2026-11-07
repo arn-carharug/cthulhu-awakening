@@ -1,15 +1,22 @@
 (function exposeDiscoverySystem(global) {
-    const SITES = Object.freeze([
-        { id: 'journal', title: 'The drifting journal', position: [8, -2.7, 43], color: [0.64, 0.44, 0.21],
+    // Copy and colours live here; positions come from GameConfig.world at construction time.
+    const SITE_COPY = Object.freeze([
+        { id: 'journal', title: 'The drifting journal', positionKey: 'journalPosition', color: [0.64, 0.44, 0.21],
             text: 'The last entry ends mid-sentence: “The compass lies near the stones. Keep the pale beacon ahead. If the eyes open, the lantern can bear witness.”' },
-        { id: 'stone', title: 'The tide-marked stone', position: [-9, -1.4, 17], color: [0.29, 0.28, 0.24], collisionRadius: 1.25,
+        { id: 'stone', title: 'The tide-marked stone', positionKey: 'stonePosition', radiusKey: 'stoneRadius', color: [0.29, 0.28, 0.24],
             text: 'A weathered inscription: “Three pillars keep the threshold. The sea remembers every visitor. What you choose to illuminate will remember you.”' }
     ]);
 
     class DiscoverySystem {
-        constructor(collisionSystem = null) {
+        constructor(collisionSystem = null, worldConfig = global.GameConfig?.world) {
+            if (!worldConfig) throw new Error('DiscoverySystem requires GameConfig.world (load js/config.js first).');
+            this.siteList = Object.freeze(SITE_COPY.map(({ positionKey, radiusKey, ...site }) => Object.freeze({
+                ...site,
+                position: Object.freeze([...worldConfig[positionKey]]),
+                ...(radiusKey ? { collisionRadius: worldConfig[radiusKey] } : {})
+            })));
             // Collision geometry lives only in collision-system.js, which must be loaded first.
-            this.collision = collisionSystem || new global.CollisionSystem();
+            this.collision = collisionSystem || new global.CollisionSystem(worldConfig);
             this.reset();
         }
 
@@ -18,7 +25,7 @@
         }
 
         get sites() {
-            return SITES;
+            return this.siteList;
         }
 
         moveShip(position, movement) {
@@ -49,7 +56,7 @@
         }
 
         nearby(position, front = null) {
-            return SITES.filter((site) => this.isAvailable(site, position, front));
+            return this.siteList.filter((site) => this.isAvailable(site, position, front));
         }
 
         inspect(id, position, front = null) {

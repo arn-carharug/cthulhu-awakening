@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const context = vm.createContext({}); context.window = context;
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/navigation.js'), 'utf8'), context);
+for (const file of ['config', 'navigation']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', file + '.js'), 'utf8'), context);
 const navigation = new context.VoyageNavigation();
 test('navigation preserves cardinal headings and wraps relative bearing', () => {
     assert.equal(navigation.sample([0, 0, 60], [0, 0, -1], 0).heading, 0);
