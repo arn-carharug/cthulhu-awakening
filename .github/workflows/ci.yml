@@ -34,3 +34,28 @@ jobs:
 
       - name: Run automated test suite
         run: node --test scripts/ritual-*.test.js
+
+  browser-smoke:
+    name: Browser smoke test (headless Chrome, software WebGL)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Boot the game and drive it in Chrome
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node scripts/browser-smoke.js --screenshot browser-smoke.png
+
+      - name: Upload rendered frame
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-frame
+          path: browser-smoke.png
+          if-no-files-found: ignore

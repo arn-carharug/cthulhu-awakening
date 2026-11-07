@@ -125,7 +125,7 @@ The repository is fully static and ready for hosting on GitHub Pages, itch.io, o
 
 ## Automated CI & Development Verification
 
-An automated GitHub Actions workflow is configured in `.github/workflows/ci.yml` running on Node 20 and 22:
+An automated GitHub Actions workflow is configured in `.github/workflows/ci.yml`: the Node suites run on Node 20 and 22, and a second job runs the browser smoke test in headless Chrome on Node 22.
 
 Run local development verification checks before committing:
 
@@ -140,6 +140,18 @@ node scripts/validate.js
 # 3. Full automated regression test suite
 node --test scripts/ritual-*.test.js
 
-# 4. Start local server
+# 4. Browser smoke test (Node 22+, uses an installed Chrome/Chromium/Edge; set CHROME_PATH otherwise)
+node scripts/browser-smoke.js
+
+# 5. Start local server
 node scripts/serve.js
 ```
+
+`scripts/browser-smoke.js` boots the real page in headless Chrome with software WebGL (SwiftShader)
+over the DevTools Protocol, with no npm dependencies. It checks that the scene loads, frames render
+more than the clear colour, a narration line really plays, the awakening runs and reset works, and
+that no page error, console error or failed request occurs. The Node suites run modules in `vm`
+contexts and cannot see browser-only failures; this test exists because two such bugs shipped
+unnoticed (narration timers throwing "Illegal invocation" and a projection matrix that was never
+uploaded until the window was resized). `--screenshot file.png` saves the rendered frame and
+`--headed` shows the browser.

@@ -19,29 +19,36 @@ const mimeTypes = {
     '.webp': 'image/webp'
 };
 
-const server = http.createServer((request, response) => {
-    const pathname = decodeURIComponent(new URL(request.url, `http://${request.headers.host}`).pathname);
-    const requested = pathname === '/' ? '/index.html' : pathname;
-    const filename = path.resolve(root, `.${requested}`);
+function createServer() {
+    return http.createServer((request, response) => {
+        const pathname = decodeURIComponent(new URL(request.url, `http://${request.headers.host}`).pathname);
+        const requested = pathname === '/' ? '/index.html' : pathname;
+        const filename = path.resolve(root, `.${requested}`);
 
-    if (filename !== root && !filename.startsWith(`${root}${path.sep}`)) {
-        response.writeHead(403).end('Forbidden');
-        return;
-    }
-
-    fs.stat(filename, (statError, stats) => {
-        if (statError || !stats.isFile()) {
-            response.writeHead(404).end('Not found');
+        if (filename !== root && !filename.startsWith(`${root}${path.sep}`)) {
+            response.writeHead(403).end('Forbidden');
             return;
         }
-        response.writeHead(200, {
-            'Content-Type': mimeTypes[path.extname(filename).toLowerCase()] || 'application/octet-stream',
-            'Cache-Control': 'no-cache'
-        });
-        fs.createReadStream(filename).pipe(response);
-    });
-});
 
-server.listen(port, '127.0.0.1', () => {
-    console.log(`Cthulhu Awakening: http://127.0.0.1:${port}`);
-});
+        fs.stat(filename, (statError, stats) => {
+            if (statError || !stats.isFile()) {
+                response.writeHead(404).end('Not found');
+                return;
+            }
+            response.writeHead(200, {
+                'Content-Type': mimeTypes[path.extname(filename).toLowerCase()] || 'application/octet-stream',
+                'Cache-Control': 'no-cache'
+            });
+            fs.createReadStream(filename).pipe(response);
+        });
+    });
+}
+
+module.exports = { createServer };
+
+if (require.main === module) {
+    const server = createServer();
+    server.listen(port, '127.0.0.1', () => {
+        console.log(`Cthulhu Awakening: http://127.0.0.1:${server.address().port}`);
+    });
+}

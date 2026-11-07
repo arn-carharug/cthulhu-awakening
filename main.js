@@ -878,6 +878,9 @@ async function main() {
     STATE.uModelLoc = STATE.gl.getUniformLocation(STATE.program, "uModel");
     STATE.uViewLoc = STATE.gl.getUniformLocation(STATE.program, "uView");
     STATE.uProjectionLoc = STATE.gl.getUniformLocation(STATE.program, "uProjection");
+    // The first resizeCanvas() ran before the program existed, so its projection upload went to a
+    // null location. Upload it now; otherwise nothing is visible until the window is resized.
+    resizeCanvas(true);
     STATE.uAmbientLightLoc = STATE.gl.getUniformLocation(STATE.program, "uAmbientLight");
     STATE.uTorchLitLoc = STATE.gl.getUniformLocation(STATE.program, "uTorchLit");
     STATE.uIsTorchLoc = STATE.gl.getUniformLocation(STATE.program, "uIsTorch");
