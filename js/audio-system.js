@@ -1,4 +1,8 @@
 (function exposeAudioSystem(global) {
+    // World-space sound. Distances are in world units (the creature rises ~140 units ahead).
+    const SPATIAL = Object.freeze({ refDistance: 25, maxDistance: 600, rolloffFactor: 0.7 });
+    const PRESENCE_MAX_GAIN = 0.32;
+
     class RitualAudioSystem {
         constructor() {
             this.context = null;
@@ -19,6 +23,8 @@
             this.omenTone = 110;
             this.volume = 0.7;
             this.onStateChange = null;
+            this.presence = null;
+            this.listenerPosition = [0, 0, 0];
         }
 
         async enable() {
@@ -77,6 +83,82 @@
             rumbleFilter.frequency.value = 105;
             this.rumble.connect(rumbleFilter).connect(this.rumbleGain).connect(this.ambientBus);
             this.rumble.start();
+
+            this.buildPresence();
+        }
+
+        // HRTF panner when the browser provides PannerNode; null otherwise (sound stays centred).
+        createSpatialPanner() {
+            if (!this.context.createPanner) return null;
+            const panner = this.context.createPanner();
+            panner.panningModel = 'HRTF'; // set explicitly: defaults differ between browsers/spec versions
+            panner.distanceModel = 'inverse';
+            panner.refDistance = SPATIAL.refDistance;
+            panner.maxDistance = SPATIAL.maxDistance;
+            panner.rolloffFactor = SPATIAL.rolloffFactor;
+            return panner;
+        }
+
+        setPannerPosition(panner, x, y, z) {
+            if (!panner) return;
+            if (panner.positionX) {
+                panner.positionX.value = x;
+                panner.positionY.value = y;
+                panner.positionZ.value = z;
+            } else panner.setPosition?.(x, y, z);
+        }
+
+        // A breathing, band-limited hiss placed at the creature, so it can be found by ear.
+        buildPresence() {
+            const source = this.context.createBufferSource();
+            source.buffer = this.createNoiseBuffer(4.2);
+            source.loop = true;
+            const band = this.context.createBiquadFilter();
+            band.type = 'bandpass';
+            band.frequency.value = 380;
+            band.Q.value = 0.9;
+            const breath = this.context.createGain();
+            breath.gain.value = 0.55;
+            const lfo = this.context.createOscillator();
+            lfo.frequency.value = 0.17;
+            const lfoDepth = this.context.createGain();
+            lfoDepth.gain.value = 0.45;
+            lfo.connect(lfoDepth).connect(breath.gain);
+            const gain = this.context.createGain();
+            gain.gain.value = 0;
+            const panner = this.createSpatialPanner();
+            source.connect(band).connect(breath).connect(gain);
+            (panner ? gain.connect(panner) : gain).connect(this.ambientBus);
+            source.start();
+            lfo.start();
+            this.presence = { gain, panner };
+        }
+
+        // Called every frame with the camera; must not allocate.
+        updateListener(position, front, up) {
+            if (!this.context) return;
+            const listener = this.context.listener;
+            this.listenerPosition[0] = position[0];
+            this.listenerPosition[1] = position[1];
+            this.listenerPosition[2] = position[2];
+            if (listener.positionX) {
+                listener.positionX.value = position[0];
+                listener.positionY.value = position[1];
+                listener.positionZ.value = position[2];
+                listener.forwardX.value = front[0];
+                listener.forwardY.value = front[1];
+                listener.forwardZ.value = front[2];
+                listener.upX.value = up[0];
+                listener.upY.value = up[1];
+                listener.upZ.value = up[2];
+            } else {
+                listener.setPosition?.(position[0], position[1], position[2]);
+                listener.setOrientation?.(front[0], front[1], front[2], up[0], up[1], up[2]);
+            }
+        }
+
+        setCreaturePosition(x, y, z) {
+            if (this.presence) this.setPannerPosition(this.presence.panner, x, y, z);
         }
 
         createNoiseBuffer(seconds) {
@@ -99,6 +181,19 @@
             this.rumble.frequency.setTargetAtTime(52 + progress * 26, now, 0.8);
             this.rumbleGain.gain.setTargetAtTime((0.035 + progress * 0.22) * hush, now, hush < 1 ? 0.12 : 0.6);
             this.windGain.gain.setTargetAtTime((0.24 + progress * 0.28) * hush, now, hush < 1 ? 0.12 : 1.2);
+            // The presence fades in once the silhouette is near (from ~30 % of the sequence).
+            const presence = Math.max(0, Math.min(1, (progress - 0.3) / 0.6)) * PRESENCE_MAX_GAIN * hush;
+            this.presence?.gain.gain.setTargetAtTime(presence, now, hush < 1 ? 0.12 : 0.9);
+        }
+
+        // Thunder for a natural strike, placed toward the strike's side of the horizon and delayed
+        // like real thunder. direction is LightningSystem.direction in [-1, 1] (left .. right).
+        distantThunder(intensity, direction) {
+            if (!this.enabled || this.muted || this.paused) return;
+            const amount = Math.min(0.32, 0.12 + intensity * 0.1);
+            const delay = 0.45 + Math.abs(direction) * 0.9;
+            const [x, , z] = this.listenerPosition;
+            this.thunder(amount, { x: x + direction * 170, y: 55, z: z - 140 }, delay);
         }
 
         cue(name) {
@@ -152,8 +247,8 @@
             this.rumbleGain.gain.exponentialRampToValueAtTime(0.055, now + 2.6);
         }
 
-        thunder(amount) {
-            const now = this.context.currentTime;
+        thunder(amount, position = null, delay = 0) {
+            const now = this.context.currentTime + delay;
             const source = this.context.createBufferSource();
             const filter = this.context.createBiquadFilter();
             const gain = this.context.createGain();
@@ -164,8 +259,11 @@
             gain.gain.setValueAtTime(0.001, now);
             gain.gain.linearRampToValueAtTime(amount, now + 0.035);
             gain.gain.exponentialRampToValueAtTime(0.001, now + 2.7);
-            source.connect(filter).connect(gain).connect(this.effectsBus);
-            this.trackTransient(source, [filter, gain]);
+            const panner = position ? this.createSpatialPanner() : null;
+            if (panner) this.setPannerPosition(panner, position.x, position.y, position.z);
+            source.connect(filter).connect(gain);
+            (panner ? gain.connect(panner) : gain).connect(this.effectsBus);
+            this.trackTransient(source, panner ? [filter, gain, panner] : [filter, gain]);
             source.start(now);
             source.stop(now + 2.8);
         }
@@ -213,8 +311,9 @@
             if (!this.context) return;
             this.stopTransients();
             const now = this.context.currentTime;
-            [this.rumble.frequency, this.rumbleGain.gain, this.windGain.gain]
-                .forEach((parameter) => parameter.cancelScheduledValues(now));
+            [this.rumble.frequency, this.rumbleGain.gain, this.windGain.gain, this.presence?.gain.gain]
+                .forEach((parameter) => parameter?.cancelScheduledValues(now));
+            this.presence?.gain.gain.setTargetAtTime(0, now, 0.25);
             this.rumble.frequency.setTargetAtTime(52, now, 0.2);
             this.rumbleGain.gain.setTargetAtTime(0.035, now, 0.25);
             this.windGain.gain.setTargetAtTime(0.24, now, 0.4);

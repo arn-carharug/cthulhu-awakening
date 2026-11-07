@@ -159,6 +159,7 @@ sceneEvents.on('awakening:reveal', () => {
     'awakening:eyes', 'awakening:reveal'
 ].forEach((name) => sceneEvents.on(name, () => ritualAudio.cue(name)));
 sceneEvents.on('timeline:update', ({ progress }) => ritualAudio.setAwakening(progress));
+sceneEvents.on('weather:lightning', ({ intensity }) => ritualAudio.distantThunder(intensity, STATE.lightning.direction));
 sceneEvents.on('timeline:complete', () => { STATE.witness.active = true; });
 ['interaction:compass', 'interaction:torch'].forEach((name) => sceneEvents.on(name, () => ritualAudio.cue(name)));
 sceneEvents.on('awakening:started', () => {
@@ -551,6 +552,7 @@ function drawScene(timestamp) {
     gl.uniformMatrix4fv(STATE.uViewLoc, false, FRAME_BUFFERS.viewMatrix);
     gl.uniform1f(STATE.uTimeLoc, STATE.elapsedTime);
     gl.uniform3fv(STATE.uCameraPosLoc, cameraPosition);
+    ritualAudio.updateListener(cameraPosition, STATE.cameraFront, STATE.cameraUp);
     gl.uniform2f(STATE.uResolutionLoc, STATE.canvas.width, STATE.canvas.height);
     gl.uniform1i(STATE.uFogEnabledLoc, STATE.effects.fog ? 1 : 0);
     const omenFog = STATE.omen.fogColor;
@@ -772,6 +774,8 @@ function drawScene(timestamp) {
         frameTranslation(CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y, CTHULHU_Z));
     STATE.mat4.scale(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix,
         frameTranslation(CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE));
+    // The presence sound comes from the head (model-space height 1.55).
+    ritualAudio.setCreaturePosition(CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y + 1.55 * CTHULHU_SCALE, CTHULHU_Z);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, STATE.cthulhuTexture);
     gl.uniform1i(STATE.uTextureLoc, 3);
