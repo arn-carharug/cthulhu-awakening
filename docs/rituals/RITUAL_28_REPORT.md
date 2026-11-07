@@ -34,7 +34,7 @@ Ritüeller XX–XXV arasındaki tüm iyileştirmelerin (HUD sadeleştirme, çarp
 
 ## Çalıştırılan komutlar ve sonuçlar
 
-- `node --check .github/workflows/ci.yml` (YAML sözdizimi doğrulandı)
+- ~~`node --check .github/workflows/ci.yml` (YAML sözdizimi doğrulandı)~~ — **Düzeltme (QA-F06):** `node --check` yalnız JavaScript dosyalarını denetler; `.yml` için `ERR_UNKNOWN_FILE_EXTENSION` ile exit 1 verir, yani bu komut YAML'ı doğrulamamıştır. Sonradan `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"` (PyYAML) ile ayrıştırma başarılı oldu. Bu, iş akışının GitHub Actions'ta çalıştığını kanıtlamaz.
 - `node scripts/validate.js` → PASS
 - `node --test scripts/ritual-*.test.js` → PASS (**63/63 test geçti**, 0 hata, ~950 ms)
 - `git diff --check` → PASS
