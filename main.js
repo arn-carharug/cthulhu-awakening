@@ -878,6 +878,9 @@ async function main() {
     STATE.uModelLoc = STATE.gl.getUniformLocation(STATE.program, "uModel");
     STATE.uViewLoc = STATE.gl.getUniformLocation(STATE.program, "uView");
     STATE.uProjectionLoc = STATE.gl.getUniformLocation(STATE.program, "uProjection");
+    // Static Gerstner chop table; WaveField also drives the boat, so drawing and motion agree.
+    STATE.gl.uniform4fv(STATE.gl.getUniformLocation(STATE.program, "uChop"), window.WaveField.uniforms.chop);
+    STATE.gl.uniform4fv(STATE.gl.getUniformLocation(STATE.program, "uChopShape"), window.WaveField.uniforms.shape);
     // The first resizeCanvas() ran before the program existed, so its projection upload went to a
     // null location. Upload it now; otherwise nothing is visible until the window is resized.
     resizeCanvas(true);

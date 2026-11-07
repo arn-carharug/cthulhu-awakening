@@ -150,6 +150,9 @@ Mevcut hiçbir temel özellik kaldırılmamış; kabul planındaki UX eksikleri 
 > [!IMPORTANT]
 > Bu değerler AG'nin kendi ölçüm anlık görüntüleridir. Ritüel XXIX QA'sı bunları bağımsız olarak yeniden ölçemedi; **+%141,5 FPS** ve **60 FPS hedefinin karşılandığı** sonucu onaylanmadı. Anlık görüntülerin varlığı, iyileşmenin nedeninin bellek ayırma/GC olduğunu göstermez. QA-F04 düzeltmesinden (`3847023`) sonra da yeniden FPS ölçümü yapılmadı.
 
+> [!WARNING]
+> **Ritüel XXV sütunu geçersizdir.** Ritüel XXIV'ten (`f780a1c`) Ritüel XXXIX'a (`633f7bc`) kadar izdüşüm matrisi hiç yüklenmiyordu: pencere boyutu değişmedikçe her kare yalnızca temizleme rengini gösteriyor, hiçbir piksel gölgelendirilmiyordu (tarayıcı duman testi ve commit'ler arası tarama ile bulundu). XXV ölçümleri bu dönemde alındığı için XX ile karşılaştırma iyileşmeyi değil boş kareyi ölçer.
+
 ---
 
 ## 8. Bilinen Sınırlamalar, İnsan Testleri ve Açık Bırakılan Maddeler

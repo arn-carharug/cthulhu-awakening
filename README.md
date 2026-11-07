@@ -105,9 +105,8 @@ assets/audio/narration/        Narration audio clips (MP3), clean sources (WAV),
 - WebGL 2, VAOs, VBOs, and indexed drawing are used directly without external 3D libraries.
 - The render loop reuses pre-allocated matrices and vectors (`FRAME_BUFFERS`, `FRAME_CONSTANTS`, and the renderer's scratch buffers). `scripts/ritual-34.test.js` runs the real `drawScene()` with a stubbed WebGL context and verifies that it creates no gl-matrix buffers per frame while sailing, inspecting the compass, during the awakening, or with the lantern lit. Plain JS objects (for example navigation samples) are still created per frame. This is an allocation count, not a browser GC profile: no measured GC pause or FPS gain is claimed from it.
 - `DOM_CACHE` throttles HUD text and style writes, preventing browser layout thrashing.
-- Baseline measurements on an integrated GPU (`Intel UHD Graphics`, 1080p Medium, DPR 1):
-  - Normal voyage: **107.11 FPS**, mean frame time **9.34 ms**, p95 **14.10 ms**.
-  - Awakening sequence: **94.00 FPS**, mean frame time **10.64 ms**, p95 **14.20 ms** (comfortably exceeding the 60 FPS target).
+- No current FPS figure is claimed. The earlier Ritual XXV figures (107 / 94 FPS on Intel UHD Graphics) were taken while a bug left the projection matrix unset, so frames drew nothing but the clear colour (fixed in ritual_39); they do not describe the visible scene and need re-measuring on that device.
+- Ocean: three long swells plus two Gerstner chop waves (`js/wave-field.js` is the single table for both the vertex shader and the boat's bob/roll/pitch), foam on folding crests broken up by smooth drifting noise, distance-faded wind ripples, and a glint path from a low, unseen moon.
 - Canvas resolution follows viewport size and device pixel ratio, capped at 2x.
 - Exponential distance fog thickens dynamically during awakening.
 - Ten pre-generated English neural narration clips accompany discoveries, key awakening moments, and endings.

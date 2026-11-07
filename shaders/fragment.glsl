@@ -7,6 +7,7 @@ in vec3 vFragPos;
 in vec2 vTexCoord;
 in vec3 vLocalPos;
 in float vWaveHeight;
+in float vCrest;
 
 uniform bool uCompassHovered;
 uniform bool uIsCompass;
@@ -47,6 +48,12 @@ uniform bool uIsDiscovery;
 uniform vec3 uStoneOrigin;
 
 out vec4 fragColor;
+
+// A low moon ahead and to the left of the starting heading, behind the storm clouds: it is never
+// drawn, only its glint path on the water.
+const vec3 MOON_DIRECTION = vec3(-0.331, 0.310, -0.891);
+const vec3 MOON_COLOR = vec3(0.55, 0.62, 0.72);
+const vec3 FOAM_COLOR = vec3(0.55, 0.66, 0.67);
 
 vec3 calculateTorchLight(vec3 baseColor, float metallic) {
     if (!uTorchLit) return vec3(0.0);
@@ -138,6 +145,22 @@ vec3 shadeWeatheredStone() {
     return color;
 }
 
+// Small wind ripples that only tilt the normal, faded out with distance so they never alias.
+vec3 rippleNormal(vec3 normal, float viewDistance) {
+    float detail = 1.0 - smoothstep(18.0, 70.0, viewDistance);
+    if (detail <= 0.0) return normal;
+    vec2 p = vFragPos.xz;
+    // Bend the coordinates slowly so the three ripple trains never settle into a regular lattice.
+    p += vec2(sin(p.y * 0.37 + uTime * 0.31), cos(p.x * 0.43 - uTime * 0.27)) * 1.4;
+    float gust = 0.55 + 0.45 * sin(dot(p, vec2(0.11, 0.17)) + uTime * 0.21);
+    float a = dot(p, vec2(0.83, 0.55)) * 1.9 + uTime * 1.7;
+    float b = dot(p, vec2(-0.38, 0.92)) * 2.6 - uTime * 2.2;
+    float c = dot(p, vec2(0.97, -0.24)) * 4.3 + uTime * 3.1;
+    vec2 tilt = vec2(0.83, 0.55) * cos(a) * 0.20 + vec2(-0.38, 0.92) * cos(b) * 0.14
+        + vec2(0.97, -0.24) * cos(c) * 0.09;
+    return normalize(normal - vec3(tilt.x, 0.0, tilt.y) * (detail * gust));
+}
+
 vec3 finishSceneColor(vec3 color) {
     color += uLightningColor * uLightningIntensity;
     if (uFogEnabled) {
@@ -179,6 +202,7 @@ void main() {
         return;
     }
     vec3 baseColor = vColor;
+    vec3 waterGlint = vec3(0.0);
     if (uIsDiscovery && vTexCoord.x < -0.5) {
         fragColor = vec4(finishSceneColor(shadeWeatheredStone()), 1.0);
         return;
@@ -199,15 +223,30 @@ void main() {
             baseColor = pow(baseColor, vec3(1.12)) * vec3(0.72, 0.79, 0.75);
         }
         if (uIsWater) {
-            vec3 viewDirection = normalize(uCameraPos - vFragPos);
-            float fresnel = pow(1.0 - max(dot(normalize(vNormal), viewDirection), 0.0), 3.0);
+            vec3 toCamera = uCameraPos - vFragPos;
+            vec3 viewDirection = normalize(toCamera);
+            vec3 surfaceNormal = rippleNormal(normalize(vNormal), length(toCamera));
+            float fresnel = pow(1.0 - max(dot(surfaceNormal, viewDirection), 0.0), 3.0);
             vec3 deepWater = vec3(0.008, 0.045, 0.072);
             vec3 reflectedSky = vec3(0.075, 0.16, 0.23) + uLightningIntensity * uLightningColor * 0.72;
             float textureDetail = dot(baseColor, vec3(0.333));
             baseColor = mix(deepWater, reflectedSky, fresnel * 0.78 + textureDetail * 0.12);
-            float foam = smoothstep(uFoamThreshold, 0.92, vWaveHeight);
-            float brokenFoam = foam * (0.55 + 0.45 * randomNoise(vFragPos.xz * 5.0 + uTime));
-            baseColor = mix(baseColor, vec3(0.55, 0.66, 0.67), brokenFoam * 0.58);
+
+            // Foam: bands on the tallest swells plus lace on the folding chop crests, broken up by
+            // drifting value noise (smooth in space and time, so it does not shimmer).
+            float swellFoam = smoothstep(uFoamThreshold, 0.92, vWaveHeight);
+            float crestFoam = smoothstep(0.72, 0.97, vCrest) * smoothstep(0.0, 0.7, vWaveHeight);
+            float foamMask = max(swellFoam * 0.8, crestFoam);
+            vec2 drift = vFragPos.xz * 0.9 + vec2(uTime * 0.09, -uTime * 0.05);
+            float lace = stoneNoise(vec3(drift, uTime * 0.12)) * 0.6
+                + stoneNoise(vec3(drift * 2.9, uTime * 0.2)) * 0.4;
+            float brokenFoam = foamMask * smoothstep(0.5, 0.78, lace + foamMask * 0.15);
+            baseColor = mix(baseColor, FOAM_COLOR, brokenFoam * 0.55);
+
+            // Moon glint: a tight sparkle plus a faint broad sheen along the moon's path.
+            float moonAlign = max(dot(reflect(-viewDirection, surfaceNormal), MOON_DIRECTION), 0.0);
+            float glint = pow(moonAlign, 140.0) * 1.3 + pow(moonAlign, 16.0) * 0.06;
+            waterGlint = MOON_COLOR * glint * (1.0 - brokenFoam) * (0.5 + 0.5 * fresnel);
         }
         vec3 ao = uUsePBR ? texture(uAOTex, vTexCoord).rgb : vec3(1.0);
         float metallic = uUsePBR ? texture(uMetallicTex, vTexCoord).r : (uIsCompass ? 0.82 : 0.0);
@@ -233,6 +272,7 @@ void main() {
             color += vec3(0.07, 0.105, 0.11) * wetFresnel * brokenWetness * 0.72;
         }
         color += calculateTorchLight(baseColor, metal);
+        color += waterGlint;
         if (uIsCthulhu) {
             float silhouette = mix(0.025, 1.0, smoothstep(0.0, 1.0, uCthulhuReveal));
             color *= silhouette;

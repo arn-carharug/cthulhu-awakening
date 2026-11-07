@@ -36,6 +36,9 @@ Aşağıdaki optimizasyonlar uygulanarak ölçülen darboğazlar giderildi:
 > [!NOTE]
 > Kontrol cihazındaki **1080p/Medium 60 FPS hedefi** uyanış sekansında `94,00 FPS` ve sakin seyirde `107,11 FPS` ile rahatlıkla karşılanmış; her iki aşamada da p95 kare süresi 60 FPS sınırı olan `16,6 ms`'nin belirgin altında (`~14,1 ms`) kalmıştır.
 
+> [!WARNING]
+> **Sonradan düzeltme (Ritüel XXXIX, `633f7bc`):** Bu ölçümler alındığında izdüşüm matrisi yüklenmiyordu (Ritüel XXIV, `f780a1c`); kareler yalnızca temizleme rengini gösteriyordu. Buradaki FPS değerleri görünür sahneyi ölçmez ve geçersizdir.
+
 ## Değişen modüller ve dosya eşlemesi
 
 - `js/config.js`: `defaultQuality: 'medium'` olarak belirlendi.

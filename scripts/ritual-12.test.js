@@ -8,7 +8,7 @@ test('world-space waves have continuous position-dependent heights and correct s
         const sample = context.WaveField.sample(x,z,12,1.4,0.82);
         const dx = (context.WaveField.sample(x+0.001,z,12,1.4,0.82).height-context.WaveField.sample(x-0.001,z,12,1.4,0.82).height)/0.002;
         assert.ok(Math.abs(dx-sample.slopeX)<1e-7);
-        assert.ok(Math.abs(sample.height)<=1.4);
+        assert.ok(Math.abs(sample.height)<=1.4*context.WaveField.maxAmplitude);
         assert.ok(Math.abs(context.WaveField.sample(x,z,12,0,0.82).height) === 0);
     }
     assert.notEqual(context.WaveField.sample(0,0,2,1,1).height,context.WaveField.sample(20,30,2,1,1).height);

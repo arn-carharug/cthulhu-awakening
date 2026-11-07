@@ -18,6 +18,8 @@ uniform float uTime;
 uniform bool uIsWater;
 uniform float uWaveHeight;
 uniform float uWaveSpeed;
+uniform vec4 uChop[2];     // Gerstner chop (WaveField.CHOP): direction x, direction z, wavenumber, angular frequency
+uniform vec4 uChopShape;   // amplitude 0, steepness 0, amplitude 1, steepness 1
 
 // VARYING
 out vec3 vColor;
@@ -26,23 +28,45 @@ out vec3 vFragPos;
 out vec2 vTexCoord;
 out vec3 vLocalPos;
 out float vWaveHeight;
+out float vCrest;
 
 void main() {
     // World pos
     vec3 animatedPosition = aPosition;
     vec3 animatedNormal = aNormal;
     vWaveHeight = 0.0;
+    vCrest = 0.0;
     if (uIsWater) {
         vec3 waterPosition = (uModel * vec4(aPosition, 1.0)).xyz;
         float phaseA = waterPosition.x * 0.055 + uTime * uWaveSpeed;
         float phaseB = waterPosition.z * 0.071 - uTime * uWaveSpeed * 0.73;
         float phaseC = (waterPosition.x + waterPosition.z) * 0.031 + uTime * uWaveSpeed * 0.46;
         float wave = sin(phaseA) * 0.48 + sin(phaseB) * 0.32 + sin(phaseC) * 0.20;
-        animatedPosition.y += wave * uWaveHeight;
         float derivativeX = cos(phaseA) * 0.48 * 0.055 + cos(phaseC) * 0.20 * 0.031;
         float derivativeZ = cos(phaseB) * 0.32 * 0.071 + cos(phaseC) * 0.20 * 0.031;
-        animatedNormal = normalize(vec3(-derivativeX * uWaveHeight, 1.0, -derivativeZ * uWaveHeight));
+
+        // Gerstner chop: vertices slide toward each crest, sharpening it; "fold" measures how much
+        // the surface bunches up there (1 - Jacobian), which is where foam forms.
+        vec3 chop = vec3(0.0);
+        float fold = 0.0;
+        float foldMax = 0.0;
+        for (int i = 0; i < 2; i++) {
+            vec4 w = uChop[i];
+            float amplitude = i == 0 ? uChopShape.x : uChopShape.z;
+            float steepness = i == 0 ? uChopShape.y : uChopShape.w;
+            float theta = w.z * dot(w.xy, waterPosition.xz) - w.w * uTime * uWaveSpeed;
+            float s = sin(theta);
+            float c = cos(theta);
+            chop += vec3(w.x * steepness * amplitude * c, amplitude * s, w.y * steepness * amplitude * c);
+            derivativeX += w.x * w.z * amplitude * c;
+            derivativeZ += w.y * w.z * amplitude * c;
+            fold += steepness * w.z * amplitude * s;
+            foldMax += steepness * w.z * amplitude;
+        }
+        animatedPosition += vec3(chop.x, wave + chop.y, chop.z) * uWaveHeight;
+        animatedNormal = normalize(vec3(-derivativeX * uWaveHeight, 1.0 - fold * uWaveHeight, -derivativeZ * uWaveHeight));
         vWaveHeight = wave;
+        vCrest = foldMax > 0.0 ? fold / foldMax : 0.0;
     }
     if (uIsParticle) {
         animatedPosition.x += sin(uTime * 0.35 + aPosition.z * 0.7) * 0.22;
