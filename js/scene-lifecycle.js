@@ -2,6 +2,13 @@
     class SceneLifecycle {
         constructor(context) {
             this.ctx = context;
+            // Identifies the latest "Read aloud" request. Bumped whenever the card or cycle that
+            // asked for it goes away, so a replay waiting on audio activation can tell it is obsolete.
+            this.replayRequest = 0;
+        }
+
+        cancelPendingReplay() {
+            this.replayRequest++;
         }
 
         get state() { return this.ctx.STATE; }
@@ -87,6 +94,7 @@
                 S.lightning?.setProfile({ intervalScale: S.omen.lightningInterval });
             }
 
+            this.cancelPendingReplay();
             this.narrator?.reset();
             S.awakeningTimeline?.reset();
             this.audio?.reset();
@@ -165,6 +173,7 @@
         }
 
         dismissEnding() {
+            this.cancelPendingReplay();
             this.narrator?.stop();
             this.presentation?.dismissEnding();
             this.setPaused(false);
@@ -177,6 +186,7 @@
             if (S.paused || S.awakeningStarted || !this.ctx.compassInspectedOnce) return;
             const site = this.discoveries?.inspect(id, S.shipPosition, S.cameraFront);
             if (!site) return;
+            this.cancelPendingReplay();
             const title = doc?.getElementById('discovery-title');
             if (title) title.textContent = site.title;
             const copy = doc?.getElementById('discovery-copy');
@@ -195,6 +205,7 @@
 
         closeDiscovery() {
             const doc = global.document;
+            this.cancelPendingReplay();
             this.narrator?.stop();
             const card = doc?.getElementById('discovery-card');
             if (card) card.hidden = true;
@@ -235,14 +246,19 @@
             if (el && this.archive) el.textContent = this.archive.summary();
         }
 
+        // Resolves true only if playback was requested; false when audio could not be enabled or
+        // the card/cycle that asked for the replay was closed or reset while activation was pending.
         async replayNarration(id) {
+            const request = ++this.replayRequest;
             const doc = global.document;
             this.narrator?.setHidden(doc?.hidden);
             this.narrator?.setEnabled(true);
             const toggle = doc?.getElementById('narration-enabled');
             if (toggle) toggle.checked = true;
-            try { await this.audio?.enable(); } catch { return; }
+            try { await this.audio?.enable(); } catch { return false; }
+            if (request !== this.replayRequest) return false;
             void this.narrator?.play(id, { modal: true, repeat: true });
+            return true;
         }
     }
 
