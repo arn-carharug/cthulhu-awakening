@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'); const path = require('node:path'); const vm = require('node:vm');
 const context = vm.createContext({}); context.window = context;
-for (const file of ['discovery-system', 'environment-effects']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', file + '.js'), 'utf8'), context);
+for (const file of ['collision-system', 'discovery-system', 'environment-effects']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', file + '.js'), 'utf8'), context);
 test('discovery range, repeat inspection, reset and optional completion are independent', () => {
     const system = new context.DiscoverySystem();
     assert.equal(system.inspect('stone', [10,0,60]), null);

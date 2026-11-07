@@ -1,6 +1,10 @@
 (function exposeCollisionSystem(global) {
     const HULL_HALF_WIDTH = 2.0;
     const HULL_HALF_LENGTH = 4.7;
+    const SKIN = 1.0001;
+    const FALLBACK_SKIN = 1.0002;
+    const FALLBACK_SAMPLES = 128;
+    const RESOLVE_PASSES = 8;
 
     class CollisionSystem {
         constructor() {
@@ -41,9 +45,72 @@
             this.obstacles.push(obstacle);
         }
 
+        // Normalized ellipse distance between the hull centre and an obstacle; < 1 means overlap.
+        static clearance(obs, position) {
+            const rx = obs.radius + HULL_HALF_WIDTH;
+            const rz = obs.radius + HULL_HALF_LENGTH;
+            return Math.hypot((position[0] - obs.position[0]) / rx, (position[2] - obs.position[2]) / rz);
+        }
+
+        activeObstacles() {
+            return this.obstacles.filter((obs) => obs.isActive());
+        }
+
+        isClear(position, obstacles = this.activeObstacles()) {
+            return obstacles.every((obs) => CollisionSystem.clearance(obs, position) >= 1.0);
+        }
+
+        // Pushes `position` (mutated in place) out of every active obstacle so the result is valid for
+        // all of them at once. Sequential push-out is retried for a few passes; when neighbouring
+        // obstacles keep pushing the hull back into each other, the nearest point on any obstacle
+        // boundary that is clear of all obstacles is used instead. Returns false if no clear point exists.
+        resolveOverlaps(position) {
+            const obstacles = this.activeObstacles();
+            for (let pass = 0; pass < RESOLVE_PASSES; pass++) {
+                let moved = false;
+                for (const obs of obstacles) {
+                    const rx = obs.radius + HULL_HALF_WIDTH;
+                    const rz = obs.radius + HULL_HALF_LENGTH;
+                    const x = (position[0] - obs.position[0]) / rx;
+                    const z = (position[2] - obs.position[2]) / rz;
+                    const dist = Math.hypot(x, z);
+                    if (dist >= 1.0) continue;
+                    const nx = dist > 1e-8 ? x / dist : 0;
+                    const nz = dist > 1e-8 ? z / dist : 1;
+                    position[0] = obs.position[0] + nx * SKIN * rx;
+                    position[2] = obs.position[2] + nz * SKIN * rz;
+                    moved = true;
+                }
+                if (!moved) return true;
+            }
+            if (this.isClear(position, obstacles)) return true;
+
+            let best = null;
+            let bestDistSq = Infinity;
+            for (const obs of obstacles) {
+                const rx = (obs.radius + HULL_HALF_WIDTH) * FALLBACK_SKIN;
+                const rz = (obs.radius + HULL_HALF_LENGTH) * FALLBACK_SKIN;
+                for (let k = 0; k < FALLBACK_SAMPLES; k++) {
+                    const angle = (k / FALLBACK_SAMPLES) * Math.PI * 2;
+                    const candidate = [obs.position[0] + Math.sin(angle) * rx, position[1], obs.position[2] + Math.cos(angle) * rz];
+                    const distSq = (candidate[0] - position[0]) ** 2 + (candidate[2] - position[2]) ** 2;
+                    if (distSq < bestDistSq && this.isClear(candidate, obstacles)) {
+                        best = candidate;
+                        bestDistSq = distSq;
+                    }
+                }
+            }
+            if (!best) return false;
+            position[0] = best[0];
+            position[2] = best[2];
+            return true;
+        }
+
         moveShip(startPosition, movement, maxIterations = 4) {
+            const startClear = this.isClear(startPosition);
             const current = [startPosition[0], startPosition[1], startPosition[2]];
             let remaining = [movement[0], movement[1], movement[2]];
+            this.resolveOverlaps(current);
 
             for (let iter = 0; iter < maxIterations; iter++) {
                 if (remaining[0] === 0 && remaining[2] === 0) break;
@@ -56,19 +123,8 @@
                     if (!obs.isActive()) continue;
                     const rx = obs.radius + HULL_HALF_WIDTH;
                     const rz = obs.radius + HULL_HALF_LENGTH;
-
-                    let x = (current[0] - obs.position[0]) / rx;
-                    let z = (current[2] - obs.position[2]) / rz;
-                    const dist = Math.hypot(x, z);
-
-                    if (dist < 1.0) {
-                        const nx = dist > 1e-8 ? x / dist : 0;
-                        const nz = dist > 1e-8 ? z / dist : 1.0001;
-                        x = nx * 1.0001;
-                        z = nz * 1.0001;
-                        current[0] = obs.position[0] + x * rx;
-                        current[2] = obs.position[2] + z * rz;
-                    }
+                    const x = (current[0] - obs.position[0]) / rx;
+                    const z = (current[2] - obs.position[2]) / rz;
 
                     const dx = remaining[0] / rx;
                     const dz = remaining[2] / rz;
@@ -77,13 +133,13 @@
                     const discriminant = b * b - a * (x * x + z * z - 1.0);
 
                     if (a > 1e-12 && b < 0 && discriminant >= 0) {
-                        const hit = (-b - Math.sqrt(discriminant)) / a;
-                        if (hit >= 0 && hit < earliestHit) {
+                        const hit = Math.max(0, (-b - Math.sqrt(discriminant)) / a);
+                        if (hit < earliestHit) {
                             earliestHit = hit;
                             hitObstacle = obs;
                             const hx = x + dx * hit;
                             const hz = z + dz * hit;
-                            const hlen = Math.hypot(hx, hz);
+                            const hlen = Math.hypot(hx, hz) || 1;
                             hitNormal = [hx / hlen, hz / hlen];
                         }
                     }
@@ -109,10 +165,10 @@
                     const curX = (current[0] - hitObstacle.position[0]) / rx;
                     const curZ = (current[2] - hitObstacle.position[2]) / rz;
                     const curDist = Math.hypot(curX, curZ);
-                    if (curDist < 1.0001) {
+                    if (curDist < SKIN) {
                         const len = curDist > 1e-8 ? curDist : 1.0;
-                        current[0] = hitObstacle.position[0] + (curX / len) * 1.0001 * rx;
-                        current[2] = hitObstacle.position[2] + (curZ / len) * 1.0001 * rz;
+                        current[0] = hitObstacle.position[0] + (curX / len) * SKIN * rx;
+                        current[2] = hitObstacle.position[2] + (curZ / len) * SKIN * rz;
                     }
                 } else {
                     current[0] += remaining[0];
@@ -122,19 +178,10 @@
                 }
             }
 
-            for (const obs of this.obstacles) {
-                if (!obs.isActive()) continue;
-                const rx = obs.radius + HULL_HALF_WIDTH;
-                const rz = obs.radius + HULL_HALF_LENGTH;
-                const x = (current[0] - obs.position[0]) / rx;
-                const z = (current[2] - obs.position[2]) / rz;
-                const dist = Math.hypot(x, z);
-                if (dist < 1.0) {
-                    const nx = dist > 1e-8 ? x / dist : 0;
-                    const nz = dist > 1e-8 ? z / dist : 1.0001;
-                    current[0] = obs.position[0] + nx * 1.0001 * rx;
-                    current[2] = obs.position[2] + nz * 1.0001 * rz;
-                }
+            // Final joint resolution: the result must be clear of every active obstacle, not only the last one.
+            if (!this.resolveOverlaps(current) && startClear) {
+                current[0] = startPosition[0];
+                current[2] = startPosition[2];
             }
 
             return [current[0], startPosition[1] + movement[1], current[2]];
