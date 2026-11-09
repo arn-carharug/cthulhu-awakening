@@ -206,6 +206,7 @@ const FRAME_BUFFERS = {
     headWorld: glMatrix.vec4.create(),
     headLocal: glMatrix.vec4.fromValues(0, 1.55, 1.39, 1),
     toHead: glMatrix.vec3.create(),
+    gazeToHead: [0, 0, 0],
     modelOrigin: glMatrix.vec4.fromValues(0, 0, 0, 1),
     transformedOrigin: glMatrix.vec4.create(),
     emitter: glMatrix.vec3.create(),
@@ -775,7 +776,21 @@ function drawScene(timestamp) {
     STATE.mat4.scale(FRAME_BUFFERS.cthulhuMatrix, FRAME_BUFFERS.cthulhuMatrix,
         frameTranslation(CTHULHU_SCALE, CTHULHU_SCALE, CTHULHU_SCALE));
     // The presence sound comes from the head (model-space height 1.55).
-    ritualAudio.setCreaturePosition(CTHULHU_X, STATE.cthulhuRiseY + CTHULHU_INITIAL_Y + 1.55 * CTHULHU_SCALE, CTHULHU_Z);
+    const creatureHeadY = STATE.cthulhuRiseY + CTHULHU_INITIAL_Y + 1.55 * CTHULHU_SCALE;
+    ritualAudio.setCreaturePosition(CTHULHU_X, creatureHeadY, CTHULHU_Z);
+    // Gaze-reactive dread: heard once the silhouette is near, until the ending is decided.
+    const gazeVisibility = !STATE.awakeningStarted || STATE.witness.complete ? 0
+        : STATE.awakeningTimeline.complete ? 1 : Math.max(0, Math.min(1, (STATE.awakeningTimeline.progress - 0.3) / 0.3));
+    let gaze = 0;
+    if (gazeVisibility > 0) {
+        const toHead = FRAME_BUFFERS.gazeToHead;
+        toHead[0] = CTHULHU_X - cameraPosition[0];
+        toHead[1] = creatureHeadY - cameraPosition[1];
+        toHead[2] = CTHULHU_Z - cameraPosition[2];
+        gaze = window.DiscoverySystem.gaze(STATE.cameraFront, toHead) * gazeVisibility;
+    }
+    STATE.gaze = gaze;
+    ritualAudio.setGaze(gaze, comfortSettings.dreadScale);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, STATE.cthulhuTexture);
     gl.uniform1i(STATE.uTextureLoc, 3);

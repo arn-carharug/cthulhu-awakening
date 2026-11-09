@@ -370,7 +370,8 @@
                 'comfort-system': 'followSystem',
                 'comfort-boat': 'reduceBoat',
                 'comfort-shake': 'reduceShake',
-                'comfort-lightning': 'reduceLightning'
+                'comfort-lightning': 'reduceLightning',
+                'comfort-dread': 'reduceDread'
             };
             for (const [id, key] of Object.entries(comfortMap)) {
                 const input = doc?.getElementById(id);

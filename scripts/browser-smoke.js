@@ -233,6 +233,21 @@ async function main() {
         // Software GL can run at ~2 fps and frame deltas are clamped, so only require progress.
         check('awakening timeline advances', t1 > t0 + 0.2, `${t0.toFixed(2)} -> ${t1.toFixed(2)} s`);
 
+        // 4b. Staring at the risen creature drives the heartbeat and drone with real Web Audio.
+        await evaluate(`STATE.awakeningTimeline.elapsed = STATE.awakeningTimeline.duration * 0.95`); // creature risen
+        for (let i = 0; i < 4; i++) { // re-aim while the head settles and the boat bobs
+            await evaluate(`(() => {
+                const p = ritualAudio.presence.panner, camera = sceneRenderer.getCameraPosition();
+                const d = [p.positionX.value - camera[0], p.positionY.value - camera[1], p.positionZ.value - camera[2]];
+                const n = Math.hypot(...d);
+                STATE.cameraFront = d.map((v) => v / n);
+            })()`);
+            await new Promise((resolve) => setTimeout(resolve, 900));
+        }
+        const dread = await evaluate(`({ gaze: STATE.gaze, level: ritualAudio.dread.level, scheduled: ritualAudio.dread.nextBeat > 0 })`);
+        results.dread = dread;
+        check('staring at the creature drives the dread audio', dread.gaze > 0.8 && dread.level > 0.8 && dread.scheduled, JSON.stringify(dread));
+
         // 5. Reset returns to a playable state.
         await evaluate(`sceneLifecycle.reset()`);
         await new Promise((resolve) => setTimeout(resolve, 500));

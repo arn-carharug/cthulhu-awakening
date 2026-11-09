@@ -7,6 +7,7 @@
                 reduceBoat: false,
                 reduceShake: false,
                 reduceLightning: false,
+                reduceDread: false,
                 captionsEnabled: true,
                 captionSize: 'normal',
                 seed: 20261018
@@ -14,7 +15,7 @@
             this.media = global.matchMedia?.('(prefers-reduced-motion: reduce)');
             try {
                 const saved = JSON.parse(global.localStorage.getItem('ritual-comfort') || 'null');
-                for (const key of ['followSystem', 'reduceBoat', 'reduceShake', 'reduceLightning', 'captionsEnabled']) {
+                for (const key of ['followSystem', 'reduceBoat', 'reduceShake', 'reduceLightning', 'reduceDread', 'captionsEnabled']) {
                     if (typeof saved?.[key] === 'boolean') this.values[key] = saved[key];
                 }
                 if (typeof saved?.captionSize === 'string' && VALID_CAPTION_SIZES.includes(saved.captionSize)) {
@@ -31,7 +32,7 @@
                 if (!VALID_CAPTION_SIZES.includes(value)) return false;
             } else if (key === 'captionsEnabled') {
                 if (typeof value !== 'boolean') return false;
-            } else if (!['followSystem', 'reduceBoat', 'reduceShake', 'reduceLightning'].includes(key) || typeof value !== 'boolean') {
+            } else if (!['followSystem', 'reduceBoat', 'reduceShake', 'reduceLightning', 'reduceDread'].includes(key) || typeof value !== 'boolean') {
                 return false;
             }
             this.values[key] = value;
@@ -46,6 +47,8 @@
         get boatMotionEnabled() { return !this.reduced('reduceBoat'); }
         get cameraShakeEnabled() { return !this.reduced('reduceShake'); }
         get lightningScale() { return this.reduced('reduceLightning') ? 0.12 : 1; }
+        // Not a motion setting, so it ignores the system reduced-motion preference.
+        get dreadScale() { return this.values.reduceDread ? 0.35 : 1; }
 
         lightningIntensity(value) {
             return Math.max(0, Math.min(value * this.lightningScale, this.lightningScale < 1 ? 0.22 : 10));

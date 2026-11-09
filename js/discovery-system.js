@@ -65,6 +65,16 @@
             return site || null;
         }
 
+        // How directly `front` points at the target: 0 beyond ~40 degrees off, 1 within ~4 degrees.
+        static gaze(front, toTarget) {
+            const length = Math.hypot(front[0], front[1], front[2]) * Math.hypot(toTarget[0], toTarget[1], toTarget[2]);
+            if (!(length > 0)) return 0;
+            const cosine = (front[0] * toTarget[0] + front[1] * toTarget[1] + front[2] * toTarget[2]) / length;
+            const degrees = (Math.acos(Math.max(-1, Math.min(1, cosine))) * 180) / Math.PI;
+            const t = Math.max(0, Math.min(1, (40 - degrees) / 36)); // linear in angle, not in cosine
+            return t * t * (3 - 2 * t);
+        }
+
         static aligned(front, toTarget) {
             const length = Math.hypot(...front) * Math.hypot(...toTarget);
             return length > 0 && (front[0] * toTarget[0] + front[1] * toTarget[1] + front[2] * toTarget[2]) / length > 0.965;

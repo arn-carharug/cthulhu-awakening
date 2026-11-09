@@ -2,6 +2,12 @@
     // World-space sound. Distances are in world units (the creature rises ~140 units ahead).
     const SPATIAL = Object.freeze({ refDistance: 25, maxDistance: 600, rolloffFactor: 0.7 });
     const PRESENCE_MAX_GAIN = 0.32;
+    // Gaze-reactive dread: a heartbeat that quickens and a low drone that opens up the more
+    // directly the player looks at the creature. level is 0 (looking away) .. 1 (staring).
+    const GAZE = Object.freeze({
+        restBpm: 50, stareBpm: 102, beatGain: 0.24, droneGain: 0.15,
+        droneCutoff: [85, 640], lookahead: 0.15, silentBelow: 0.04
+    });
 
     class RitualAudioSystem {
         constructor() {
@@ -25,6 +31,8 @@
             this.onStateChange = null;
             this.presence = null;
             this.listenerPosition = [0, 0, 0];
+            this.hush = 1;
+            this.dread = null;
         }
 
         async enable() {
@@ -85,6 +93,77 @@
             this.rumble.start();
 
             this.buildPresence();
+            this.buildDread();
+        }
+
+        // Detuned saw drone an octave below the omen tone, behind a lowpass that the gaze opens.
+        buildDread() {
+            const filter = this.context.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = GAZE.droneCutoff[0];
+            filter.Q.value = 3.5;
+            const gain = this.context.createGain();
+            gain.gain.value = 0;
+            const oscillators = [0.5, 0.503, 0.75].map((ratio) => {
+                const oscillator = this.context.createOscillator();
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.value = this.omenTone * ratio;
+                oscillator.connect(filter);
+                oscillator.start();
+                return { oscillator, ratio };
+            });
+            filter.connect(gain).connect(this.ambientBus);
+            this.dread = { gain, filter, oscillators, level: 0, applied: -1, nextBeat: 0 };
+        }
+
+        // Called every frame. amount: how directly the creature is watched (0..1); scale: the comfort
+        // setting (1, or less when the player softened the heartbeat). Allocates nothing except when a
+        // beat is scheduled (about once per second).
+        setGaze(amount, scale = 1) {
+            const dread = this.dread;
+            if (!dread) return;
+            const level = Math.max(0, Math.min(1, amount)) * scale;
+            dread.level = level;
+            if (!this.enabled || this.muted || this.paused) return;
+            const now = this.context.currentTime;
+            const heard = level * this.hush;
+            if (Math.abs(heard - dread.applied) > 0.01) {
+                const rising = heard > dread.applied;
+                dread.applied = heard;
+                dread.gain.gain.setTargetAtTime(heard * heard * GAZE.droneGain, now, rising ? 0.5 : 1.4);
+                const [closed, open] = GAZE.droneCutoff;
+                dread.filter.frequency.setTargetAtTime(closed + (open - closed) * heard, now, rising ? 0.6 : 1.6);
+            }
+            if (heard < GAZE.silentBelow) {
+                dread.nextBeat = 0;
+                return;
+            }
+            // Late frames (or a resume after pause) re-anchor instead of firing a burst of beats.
+            if (dread.nextBeat < now) dread.nextBeat = now + 0.05;
+            while (dread.nextBeat < now + GAZE.lookahead) {
+                this.beat(dread.nextBeat, heard * GAZE.beatGain);
+                dread.nextBeat += 60 / (GAZE.restBpm + (GAZE.stareBpm - GAZE.restBpm) * level);
+            }
+        }
+
+        // One lub-dub starting at time `at`.
+        beat(at, amount) {
+            this.thump(at, 57, amount);
+            this.thump(at + 0.28, 48, amount * 0.6);
+        }
+
+        thump(at, frequency, amount) {
+            const oscillator = this.context.createOscillator();
+            const gain = this.context.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, at);
+            gain.gain.setValueAtTime(0.001, at);
+            gain.gain.linearRampToValueAtTime(Math.max(0.0011, amount), at + 0.035);
+            gain.gain.exponentialRampToValueAtTime(0.001, at + 0.24);
+            oscillator.connect(gain).connect(this.effectsBus);
+            this.trackTransient(oscillator, [gain]);
+            oscillator.start(at);
+            oscillator.stop(at + 0.25);
         }
 
         // HRTF panner when the browser provides PannerNode; null otherwise (sound stays centred).
@@ -178,6 +257,7 @@
             if (!this.enabled || this.muted || this.paused) return;
             const now = this.context.currentTime;
             const hush = (progress > 0.53 && progress < 0.57) || (progress > 0.82 && progress < 0.855) ? 0.15 : 1;
+            this.hush = hush;
             this.rumble.frequency.setTargetAtTime(52 + progress * 26, now, 0.8);
             this.rumbleGain.gain.setTargetAtTime((0.035 + progress * 0.22) * hush, now, hush < 1 ? 0.12 : 0.6);
             this.windGain.gain.setTargetAtTime((0.24 + progress * 0.28) * hush, now, hush < 1 ? 0.12 : 1.2);
@@ -236,6 +316,7 @@
 
         setOmen(id) {
             this.omenTone = { 'black-tide': 82, 'red-wake': 123, 'drowned-star': 147, 'hollow-calm': 196 }[id] || 110;
+            for (const { oscillator, ratio } of this.dread?.oscillators || []) oscillator.frequency.value = this.omenTone * ratio;
         }
 
         pulseRumble(amount) {
@@ -270,19 +351,7 @@
 
         heartbeat() {
             const now = this.context.currentTime;
-            [0, 0.28, 1.05, 1.33].forEach((offset, index) => {
-                const oscillator = this.context.createOscillator();
-                const gain = this.context.createGain();
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(index % 2 ? 48 : 57, now + offset);
-                gain.gain.setValueAtTime(0.001, now + offset);
-                gain.gain.linearRampToValueAtTime(index % 2 ? 0.11 : 0.19, now + offset + 0.035);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.24);
-                oscillator.connect(gain).connect(this.effectsBus);
-                this.trackTransient(oscillator, [gain]);
-                oscillator.start(now + offset);
-                oscillator.stop(now + offset + 0.25);
-            });
+            [0, 0.28, 1.05, 1.33].forEach((offset, index) => this.thump(now + offset, index % 2 ? 48 : 57, index % 2 ? 0.11 : 0.19));
         }
 
         toggle() {
@@ -311,9 +380,16 @@
             if (!this.context) return;
             this.stopTransients();
             const now = this.context.currentTime;
-            [this.rumble.frequency, this.rumbleGain.gain, this.windGain.gain, this.presence?.gain.gain]
+            [this.rumble.frequency, this.rumbleGain.gain, this.windGain.gain, this.presence?.gain.gain,
+                this.dread?.gain.gain, this.dread?.filter.frequency]
                 .forEach((parameter) => parameter?.cancelScheduledValues(now));
             this.presence?.gain.gain.setTargetAtTime(0, now, 0.25);
+            this.hush = 1;
+            if (this.dread) {
+                this.dread.gain.gain.setTargetAtTime(0, now, 0.25);
+                this.dread.filter.frequency.setTargetAtTime(GAZE.droneCutoff[0], now, 0.25);
+                Object.assign(this.dread, { level: 0, applied: 0, nextBeat: 0 });
+            }
             this.rumble.frequency.setTargetAtTime(52, now, 0.2);
             this.rumbleGain.gain.setTargetAtTime(0.035, now, 0.25);
             this.windGain.gain.setTargetAtTime(0.24, now, 0.4);
